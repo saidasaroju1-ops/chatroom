@@ -1,0 +1,3329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PinRoom — 6-Digit Code Chat & File Share</title>
+  <meta name="theme-color" content="#6366f1" />
+  <link rel="manifest" href="./manifest.webmanifest" />
+  <link rel="icon" type="image/png" sizes="192x192" href="./icon-192.png" />
+  <link rel="apple-touch-icon" href="./icon-192.png" />
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+  <script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap');
+    body {
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    }
+    .font-mono-code {
+      font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+    }
+    .pin-input::-webkit-outer-spin-button,
+    .pin-input::-webkit-inner-spin-button {
+      -webkit-appearance: none;
+      margin: 0;
+    }
+    .chat-scroll::-webkit-scrollbar {
+      width: 6px;
+    }
+    .chat-scroll::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    .chat-scroll::-webkit-scrollbar-thumb {
+      background: rgba(148, 163, 184, 0.35);
+      border-radius: 9999px;
+    }
+    .chat-scroll::-webkit-scrollbar-thumb:hover {
+      background: rgba(148, 163, 184, 0.6);
+    }
+    @keyframes fadeSlideUp {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .msg-enter {
+      animation: fadeSlideUp 0.14s ease-out forwards;
+    }
+    #room-view {
+      --room-accent: #6366f1;
+    }
+    .room-accent-bg {
+      background-color: var(--room-accent) !important;
+    }
+    .room-accent-text {
+      color: var(--room-accent) !important;
+    }
+    .room-accent-border {
+      border-color: var(--room-accent) !important;
+    }
+    .room-header-tint {
+      border-bottom-color: color-mix(in srgb, var(--room-accent) 45%, #1e293b) !important;
+      background: linear-gradient(180deg, color-mix(in srgb, var(--room-accent) 14%, #0f172a) 0%, rgba(15, 23, 42, 0.96) 100%);
+    }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col antialiased selection:bg-indigo-500/30">
+
+  <!-- Toast Container -->
+  <div id="toast-container" class="fixed top-4 right-4 z-50 flex flex-col gap-2 pointer-events-none max-w-xs w-full"></div>
+
+  <!-- Image Lightbox Modal -->
+  <div id="lightbox-modal" class="hidden fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="relative max-w-4xl w-full flex flex-col items-center gap-3">
+      <div class="w-full flex items-center justify-between text-slate-200 px-1">
+        <span id="lightbox-title" class="text-sm font-medium truncate max-w-md"></span>
+        <div class="flex items-center gap-2">
+          <a id="lightbox-download" href="#" download target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-xs font-medium text-white transition">
+            <i data-lucide="download" class="w-3.5 h-3.5"></i>
+            Download
+          </a>
+          <button id="lightbox-close" type="button" class="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition" aria-label="Close preview">
+            <i data-lucide="x" class="w-4 h-4"></i>
+          </button>
+        </div>
+      </div>
+      <img id="lightbox-img" src="" alt="Preview" class="max-h-[80vh] max-w-full rounded-xl shadow-2xl border border-slate-800 object-contain" />
+    </div>
+  </div>
+
+  <!-- Clear Chat Confirmation Modal -->
+  <div id="confirm-modal" class="hidden fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-sm w-full p-5 shadow-2xl">
+      <h3 class="text-base font-semibold text-white">Clear local room view?</h3>
+      <p class="text-sm text-slate-400 mt-1.5">This clears messages and shared files from your browser view for this room.</p>
+      <div class="flex items-center justify-end gap-2 mt-5">
+        <button id="confirm-cancel" type="button" class="px-3.5 py-2 rounded-xl text-sm font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 transition">Cancel</button>
+        <button id="confirm-proceed" type="button" class="px-3.5 py-2 rounded-xl text-sm font-medium bg-rose-600 hover:bg-rose-500 text-white transition">Clear Chat</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Poll Creator Modal -->
+  <div id="poll-modal" class="hidden fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-sm w-full p-5 shadow-2xl">
+      <div class="flex items-center justify-between mb-3">
+        <h3 class="text-base font-semibold text-white flex items-center gap-2">
+          <i data-lucide="bar-chart-2" class="w-4 h-4 text-indigo-400"></i>
+          Create Quick Poll
+        </h3>
+        <button id="poll-close-btn" type="button" class="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition" aria-label="Close poll modal">
+          <i data-lucide="x" class="w-4 h-4"></i>
+        </button>
+      </div>
+      <form id="poll-form" class="space-y-3">
+        <div>
+          <label for="poll-question" class="block text-xs font-medium text-slate-400 mb-1">Question</label>
+          <input id="poll-question" type="text" maxlength="100" placeholder="e.g. Where should we meet?" class="w-full px-3 py-2 text-sm bg-slate-950 border border-slate-800 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500" />
+        </div>
+        <div class="space-y-2">
+          <label class="block text-xs font-medium text-slate-400">Options (at least 2)</label>
+          <input type="text" maxlength="50" placeholder="Option 1" class="poll-option-input w-full px-3 py-2 text-sm bg-slate-950 border border-slate-800 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500" />
+          <input type="text" maxlength="50" placeholder="Option 2" class="poll-option-input w-full px-3 py-2 text-sm bg-slate-950 border border-slate-800 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500" />
+          <input type="text" maxlength="50" placeholder="Option 3 (optional)" class="poll-option-input w-full px-3 py-2 text-sm bg-slate-950 border border-slate-800 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500" />
+          <input type="text" maxlength="50" placeholder="Option 4 (optional)" class="poll-option-input w-full px-3 py-2 text-sm bg-slate-950 border border-slate-800 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500" />
+        </div>
+        <p id="poll-error" class="hidden text-xs text-rose-400">Enter a question and at least 2 options.</p>
+        <div class="flex items-center justify-end gap-2 pt-2">
+          <button id="poll-cancel-btn" type="button" class="px-3.5 py-2 rounded-xl text-sm font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 transition">Cancel</button>
+          <button type="submit" class="px-4 py-2 rounded-xl text-sm font-semibold bg-indigo-600 hover:bg-indigo-500 text-white transition">Send Poll</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Shared Files & Media Drawer -->
+  <div id="files-drawer-backdrop" class="hidden fixed inset-0 z-40 bg-slate-950/60 backdrop-blur-xs"></div>
+  <aside id="files-drawer" class="hidden fixed top-0 right-0 z-50 h-full w-80 max-w-full bg-slate-900 border-l border-slate-800 shadow-2xl flex flex-col">
+    <div class="px-4 py-3.5 border-b border-slate-800 flex items-center justify-between">
+      <div class="flex items-center gap-2">
+        <i data-lucide="folder-open" class="w-4 h-4 text-indigo-400"></i>
+        <h3 class="text-sm font-semibold text-white">Shared Files</h3>
+        <span id="drawer-file-count" class="px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-slate-800 text-slate-300">0</span>
+      </div>
+      <button id="close-drawer-btn" type="button" class="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition" aria-label="Close shared files">
+        <i data-lucide="x" class="w-4 h-4"></i>
+      </button>
+    </div>
+    <div class="px-4 py-2 border-b border-slate-800 flex items-center gap-1.5">
+      <button type="button" data-drawer-tab="all" class="drawer-tab-btn px-2.5 py-1 rounded-lg text-xs font-medium bg-indigo-600 text-white transition">All</button>
+      <button type="button" data-drawer-tab="media" class="drawer-tab-btn px-2.5 py-1 rounded-lg text-xs font-medium bg-slate-800 text-slate-300 hover:text-white transition">Media</button>
+      <button type="button" data-drawer-tab="docs" class="drawer-tab-btn px-2.5 py-1 rounded-lg text-xs font-medium bg-slate-800 text-slate-300 hover:text-white transition">Docs</button>
+    </div>
+    <div id="drawer-files-list" class="flex-1 overflow-y-auto chat-scroll p-3 space-y-2.5"></div>
+  </aside>
+
+  <!-- Host Password Modal -->
+  <div id="host-auth-modal" class="hidden fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-sm w-full p-5 shadow-2xl">
+      <div class="flex items-center justify-between mb-3">
+        <h3 class="text-base font-semibold text-white flex items-center gap-2">
+          <i data-lucide="shield-check" class="w-4 h-4 text-amber-400"></i>
+          Host Login
+        </h3>
+        <button id="host-auth-close" type="button" class="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition" aria-label="Close host login">
+          <i data-lucide="x" class="w-4 h-4"></i>
+        </button>
+      </div>
+      <p class="text-xs text-slate-400 mb-4">Enter the host password to manage room members and approve join requests.</p>
+      <form id="host-auth-form" class="space-y-3">
+        <div>
+          <div class="flex items-center justify-between mb-1">
+            <label for="host-room-code" class="text-xs font-medium text-slate-400">6-Digit Room Code</label>
+            <button id="host-random-code-btn" type="button" class="text-[11px] font-medium text-indigo-400 hover:text-indigo-300 transition">Random</button>
+          </div>
+          <input id="host-room-code" type="text" inputmode="numeric" maxlength="6" placeholder="e.g. 123456" class="w-full px-3 py-2 text-sm font-mono-code bg-slate-950 border border-slate-800 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-amber-500" />
+        </div>
+        <div class="grid grid-cols-2 gap-2.5">
+          <div>
+            <label for="host-name-input" class="block text-xs font-medium text-slate-400 mb-1">Host Name</label>
+            <input id="host-name-input" type="text" maxlength="24" placeholder="Host" class="w-full px-3 py-2 text-sm bg-slate-950 border border-slate-800 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-amber-500" />
+          </div>
+          <div>
+            <label for="host-room-name-input" class="block text-xs font-medium text-slate-400 mb-1">Room Name</label>
+            <input id="host-room-name-input" type="text" maxlength="32" placeholder="e.g. Study Group" class="w-full px-3 py-2 text-sm bg-slate-950 border border-slate-800 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-amber-500" />
+          </div>
+        </div>
+        <div>
+          <div class="flex items-center justify-between mb-1">
+            <label for="host-room-color-input" class="text-xs font-medium text-slate-400">Room Colour</label>
+            <span id="host-auth-color-hex" class="text-[11px] font-mono-code text-slate-400">#6366f1</span>
+          </div>
+          <div class="flex items-center gap-2">
+            <input id="host-room-color-input" type="color" value="#6366f1" class="w-9 h-9 rounded-lg bg-slate-950 border border-slate-700 cursor-pointer p-0.5 shrink-0" />
+            <div id="host-auth-swatches" class="flex flex-wrap gap-1.5">
+              <button type="button" data-color-swatch="#6366f1" class="w-6 h-6 rounded-full border border-white/20" style="background:#6366f1" aria-label="Indigo"></button>
+              <button type="button" data-color-swatch="#10b981" class="w-6 h-6 rounded-full border border-white/20" style="background:#10b981" aria-label="Emerald"></button>
+              <button type="button" data-color-swatch="#f43f5e" class="w-6 h-6 rounded-full border border-white/20" style="background:#f43f5e" aria-label="Rose"></button>
+              <button type="button" data-color-swatch="#f59e0b" class="w-6 h-6 rounded-full border border-white/20" style="background:#f59e0b" aria-label="Amber"></button>
+              <button type="button" data-color-swatch="#06b6d4" class="w-6 h-6 rounded-full border border-white/20" style="background:#06b6d4" aria-label="Cyan"></button>
+              <button type="button" data-color-swatch="#a855f7" class="w-6 h-6 rounded-full border border-white/20" style="background:#a855f7" aria-label="Purple"></button>
+            </div>
+          </div>
+        </div>
+        <div>
+          <label for="host-password-input" class="block text-xs font-medium text-slate-400 mb-1">Host Password</label>
+          <div class="relative">
+            <input id="host-password-input" type="password" placeholder="Enter host password" class="w-full px-3 py-2 pr-10 text-sm bg-slate-950 border border-slate-800 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-amber-500" />
+            <button id="host-password-toggle" type="button" class="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white p-1" aria-label="Toggle password visibility">
+              <i data-lucide="eye" class="w-4 h-4"></i>
+            </button>
+          </div>
+        </div>
+        <p id="host-auth-error" class="hidden text-xs text-rose-400"></p>
+        <div class="flex items-center justify-end gap-2 pt-2">
+          <button id="host-auth-cancel" type="button" class="px-3.5 py-2 rounded-xl text-sm font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 transition">Cancel</button>
+          <button type="submit" class="px-4 py-2 rounded-xl text-sm font-semibold bg-amber-600 hover:bg-amber-500 text-white transition">Enter as Host</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Host Controls Modal -->
+  <div id="host-controls-modal" class="hidden fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-5 shadow-2xl max-h-[85vh] flex flex-col">
+      <div class="flex items-center justify-between mb-4 shrink-0">
+        <h3 class="text-base font-semibold text-white flex items-center gap-2">
+          <i data-lucide="shield-check" class="w-4 h-4 text-amber-400"></i>
+          Host Controls
+        </h3>
+        <button id="host-controls-close" type="button" class="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition" aria-label="Close host controls">
+          <i data-lucide="x" class="w-4 h-4"></i>
+        </button>
+      </div>
+      <div class="space-y-4 overflow-y-auto chat-scroll pr-1">
+        <div class="p-3 rounded-xl bg-slate-950 border border-slate-800 space-y-2.5">
+          <h4 class="text-xs font-semibold uppercase tracking-wider text-slate-400">Room Name &amp; Colour</h4>
+          <div class="flex items-center gap-2">
+            <input id="ctrl-room-name-input" type="text" maxlength="32" placeholder="Add a room name..." class="flex-1 px-3 py-1.5 text-xs bg-slate-900 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-amber-500" />
+            <input id="ctrl-room-color-input" type="color" value="#6366f1" class="w-8 h-8 rounded-lg bg-slate-900 border border-slate-700 cursor-pointer p-0.5 shrink-0" title="Custom room colour" />
+            <button id="ctrl-save-room-btn" type="button" class="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-white text-xs font-semibold transition shrink-0">Apply</button>
+          </div>
+          <div id="ctrl-color-swatches" class="flex items-center gap-1.5">
+            <button type="button" data-ctrl-swatch="#6366f1" class="w-5 h-5 rounded-full border border-white/20" style="background:#6366f1" aria-label="Indigo"></button>
+            <button type="button" data-ctrl-swatch="#10b981" class="w-5 h-5 rounded-full border border-white/20" style="background:#10b981" aria-label="Emerald"></button>
+            <button type="button" data-ctrl-swatch="#f43f5e" class="w-5 h-5 rounded-full border border-white/20" style="background:#f43f5e" aria-label="Rose"></button>
+            <button type="button" data-ctrl-swatch="#f59e0b" class="w-5 h-5 rounded-full border border-white/20" style="background:#f59e0b" aria-label="Amber"></button>
+            <button type="button" data-ctrl-swatch="#06b6d4" class="w-5 h-5 rounded-full border border-white/20" style="background:#06b6d4" aria-label="Cyan"></button>
+            <button type="button" data-ctrl-swatch="#a855f7" class="w-5 h-5 rounded-full border border-white/20" style="background:#a855f7" aria-label="Purple"></button>
+            <button type="button" data-ctrl-swatch="#ec4899" class="w-5 h-5 rounded-full border border-white/20" style="background:#ec4899" aria-label="Pink"></button>
+            <button type="button" data-ctrl-swatch="#14b8a6" class="w-5 h-5 rounded-full border border-white/20" style="background:#14b8a6" aria-label="Teal"></button>
+          </div>
+        </div>
+        <div>
+          <div class="flex items-center justify-between mb-2">
+            <h4 class="text-xs font-semibold uppercase tracking-wider text-slate-400">Pending Join Requests</h4>
+            <span id="host-pending-count" class="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-500/15 text-amber-300 border border-amber-500/30">0</span>
+          </div>
+          <div id="host-pending-list" class="space-y-2"></div>
+        </div>
+        <div class="pt-3 border-t border-slate-800">
+          <div class="flex items-center justify-between mb-2">
+            <h4 class="text-xs font-semibold uppercase tracking-wider text-slate-400">Room Members</h4>
+            <span id="host-members-count" class="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-slate-800 text-slate-300">0</span>
+          </div>
+          <div id="host-members-list" class="space-y-2"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- LOBBY VIEW -->
+  <main id="lobby-view" class="flex-1 flex items-center justify-center p-4 sm:p-6">
+    <div class="w-full max-w-md bg-slate-900/90 border border-slate-800/90 rounded-3xl p-6 sm:p-8 shadow-2xl backdrop-blur">
+      <div class="flex items-center justify-between mb-6">
+        <div class="flex items-center gap-3">
+          <div class="w-11 h-11 rounded-2xl bg-indigo-600/20 border border-indigo-500/30 flex items-center justify-center text-indigo-400">
+            <i data-lucide="lock-keyhole" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <h1 class="text-xl font-bold tracking-tight text-white">PinRoom</h1>
+            <p class="text-xs text-slate-400">Instant 6-digit code chat &amp; file drop</p>
+          </div>
+        </div>
+        <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+          <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+          High-Speed Stream
+        </span>
+      </div>
+
+      <form id="join-form" class="space-y-5">
+        <div>
+          <div class="flex items-center justify-between mb-2">
+            <label class="text-xs font-semibold uppercase tracking-wider text-slate-400">Enter 6-Digit Code</label>
+            <button id="generate-code-btn" type="button" class="inline-flex items-center gap-1 text-xs font-medium text-indigo-400 hover:text-indigo-300 transition">
+              <i data-lucide="sparkles" class="w-3.5 h-3.5"></i>
+              Random Code
+            </button>
+          </div>
+          <div id="pin-container" class="grid grid-cols-6 gap-2 sm:gap-2.5">
+            <input type="text" inputmode="numeric" maxlength="1" aria-label="Digit 1" class="pin-input w-full h-12 sm:h-14 text-center text-xl sm:text-2xl font-bold font-mono-code bg-slate-950 border border-slate-700/80 rounded-xl text-white focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/30 transition" />
+            <input type="text" inputmode="numeric" maxlength="1" aria-label="Digit 2" class="pin-input w-full h-12 sm:h-14 text-center text-xl sm:text-2xl font-bold font-mono-code bg-slate-950 border border-slate-700/80 rounded-xl text-white focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/30 transition" />
+            <input type="text" inputmode="numeric" maxlength="1" aria-label="Digit 3" class="pin-input w-full h-12 sm:h-14 text-center text-xl sm:text-2xl font-bold font-mono-code bg-slate-950 border border-slate-700/80 rounded-xl text-white focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/30 transition" />
+            <input type="text" inputmode="numeric" maxlength="1" aria-label="Digit 4" class="pin-input w-full h-12 sm:h-14 text-center text-xl sm:text-2xl font-bold font-mono-code bg-slate-950 border border-slate-700/80 rounded-xl text-white focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/30 transition" />
+            <input type="text" inputmode="numeric" maxlength="1" aria-label="Digit 5" class="pin-input w-full h-12 sm:h-14 text-center text-xl sm:text-2xl font-bold font-mono-code bg-slate-950 border border-slate-700/80 rounded-xl text-white focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/30 transition" />
+            <input type="text" inputmode="numeric" maxlength="1" aria-label="Digit 6" class="pin-input w-full h-12 sm:h-14 text-center text-xl sm:text-2xl font-bold font-mono-code bg-slate-950 border border-slate-700/80 rounded-xl text-white focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/30 transition" />
+          </div>
+          <p id="pin-error" class="hidden text-xs text-rose-400 mt-2">Please enter all 6 digits to join or create a room.</p>
+        </div>
+
+        <div>
+          <label for="nickname-input" class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">Your Name <span class="text-rose-400">*</span></label>
+          <input id="nickname-input" type="text" maxlength="24" placeholder="Enter your name to join (e.g. Alex)" class="w-full px-3.5 py-2.5 text-sm bg-slate-950 border border-slate-800 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition" />
+          <p id="name-error" class="hidden text-xs text-rose-400 mt-1.5">Please enter your name before joining a room.</p>
+        </div>
+
+        <div class="grid grid-cols-3 gap-2.5">
+          <button id="enter-room-btn" type="submit" class="col-span-2 py-3 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 active:scale-[0.99] text-white font-semibold text-sm flex items-center justify-center gap-2 shadow-lg shadow-indigo-600/25 transition">
+            <span>Enter Room</span>
+            <i data-lucide="arrow-right" class="w-4 h-4"></i>
+          </button>
+          <button id="open-host-modal-btn" type="button" class="col-span-1 py-3 px-3 rounded-xl bg-amber-600/20 hover:bg-amber-600/30 border border-amber-500/40 active:scale-[0.99] text-amber-300 font-semibold text-sm flex items-center justify-center gap-1.5 transition" title="Enter as Room Host">
+            <i data-lucide="shield-check" class="w-4 h-4"></i>
+            <span>Host</span>
+          </button>
+        </div>
+      </form>
+
+      <div class="mt-6 pt-5 border-t border-slate-800/80">
+        <p class="text-xs font-medium text-slate-400 mb-2.5">Quick-join sample rooms</p>
+        <div class="flex flex-wrap gap-2">
+          <button type="button" data-quick-code="123456" class="quick-code-btn inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-800 border border-slate-700/60 text-xs font-mono-code text-slate-200 transition">
+            <span class="text-indigo-400">#</span>123456
+          </button>
+          <button type="button" data-quick-code="808080" class="quick-code-btn inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-800 border border-slate-700/60 text-xs font-mono-code text-slate-200 transition">
+            <span class="text-indigo-400">#</span>808080
+          </button>
+          <button type="button" data-quick-code="246810" class="quick-code-btn inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-800 border border-slate-700/60 text-xs font-mono-code text-slate-200 transition">
+            <span class="text-indigo-400">#</span>246810
+          </button>
+        </div>
+        <p class="text-[11px] text-slate-500 mt-3 leading-relaxed">Built for fast multi-user rooms: live HTTP streaming delivers messages in milliseconds with zero polling lag.</p>
+      </div>
+    </div>
+  </main>
+
+  <!-- CHAT ROOM VIEW -->
+  <section id="room-view" class="hidden flex-1 flex flex-col h-screen max-h-screen overflow-hidden">
+    <!-- Top Bar -->
+    <header id="room-header" class="shrink-0 room-header-tint border-b border-slate-800 px-3 sm:px-5 py-3 flex items-center justify-between gap-2">
+      <div class="flex items-center gap-2.5 min-w-0">
+        <button id="leave-room-btn" type="button" class="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 transition shrink-0" title="Leave room" aria-label="Leave room">
+          <i data-lucide="arrow-left" class="w-4 h-4"></i>
+        </button>
+        <div class="min-w-0">
+          <div class="flex items-center gap-2 min-w-0">
+            <span id="room-name-display" class="text-sm font-bold text-white truncate max-w-[140px] sm:max-w-[220px]">Room</span>
+            <button id="copy-code-btn" type="button" class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-900/70 hover:bg-slate-800 border room-accent-border room-accent-text font-mono-code text-xs font-bold transition shrink-0" title="Copy 6-digit code">
+              <span id="room-code-display">000000</span>
+              <i data-lucide="copy" class="w-3.5 h-3.5"></i>
+            </button>
+          </div>
+          <div class="flex items-center gap-2 mt-0.5 text-[11px] text-slate-400 truncate">
+            <button id="sync-badge" type="button" title="Click to reconnect stream" class="inline-flex items-center gap-1 text-emerald-400 hover:underline cursor-pointer">
+              <span id="sync-dot" class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+              <span id="peer-status-text">Connecting...</span>
+            </button>
+            <span>•</span>
+            <span id="user-badge-name" class="truncate text-slate-300 font-medium"></span>
+            <span id="host-role-badge" class="hidden px-1.5 py-0.5 rounded-md bg-amber-500/20 border border-amber-500/40 text-amber-300 text-[10px] font-bold uppercase tracking-wider">Host</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-1 sm:gap-1.5 shrink-0">
+        <button id="host-controls-btn" type="button" class="hidden relative inline-flex items-center gap-1.5 px-2.5 py-2 rounded-xl bg-amber-600/20 hover:bg-amber-600/30 border border-amber-500/40 text-amber-300 text-xs font-semibold transition" title="Host Controls (Accept / Remove Members)">
+          <i data-lucide="shield-check" class="w-3.5 h-3.5"></i>
+          <span class="hidden sm:inline">Host</span>
+          <span id="host-pending-badge" class="hidden px-1.5 py-0.5 rounded-full bg-amber-500 text-slate-950 text-[10px] font-bold leading-none">0</span>
+        </button>
+        <button id="open-drawer-btn" type="button" class="p-2 rounded-xl bg-slate-800/80 hover:bg-slate-800 text-slate-300 transition relative" title="Shared files &amp; media" aria-label="Shared files and media">
+          <i data-lucide="folder-open" class="w-4 h-4"></i>
+        </button>
+        <button id="sound-toggle-btn" type="button" class="p-2 rounded-xl bg-slate-800/80 hover:bg-slate-800 text-slate-300 transition" title="Toggle sound alerts" aria-label="Toggle sound alerts">
+          <i data-lucide="volume-2" class="w-4 h-4"></i>
+        </button>
+        <button id="starred-filter-btn" type="button" class="p-2 rounded-xl bg-slate-800/80 hover:bg-slate-800 text-slate-300 transition" title="Show starred messages" aria-label="Show starred messages">
+          <i data-lucide="star" class="w-4 h-4"></i>
+        </button>
+        <button id="toggle-search-btn" type="button" class="p-2 rounded-xl bg-slate-800/80 hover:bg-slate-800 text-slate-300 transition" title="Search messages" aria-label="Search messages">
+          <i data-lucide="search" class="w-4 h-4"></i>
+        </button>
+        <button id="switch-sender-btn" type="button" class="inline-flex items-center gap-1.5 px-2.5 py-2 rounded-xl bg-slate-800/80 hover:bg-slate-800 text-slate-200 text-xs font-medium transition" title="Toggle sending as yourself or a test peer">
+          <i data-lucide="users" class="w-3.5 h-3.5 text-indigo-400"></i>
+          <span id="sender-mode-label" class="hidden sm:inline">As: Me</span>
+        </button>
+        <button id="clear-chat-btn" type="button" class="p-2 rounded-xl bg-slate-800/80 hover:bg-rose-600/20 hover:text-rose-400 text-slate-400 transition" title="Clear local room view" aria-label="Clear local room view">
+          <i data-lucide="trash-2" class="w-4 h-4"></i>
+        </button>
+      </div>
+    </header>
+
+    <!-- Search Bar (collapsible) -->
+    <div id="search-bar" class="hidden shrink-0 bg-slate-900/80 border-b border-slate-800 px-4 py-2 flex items-center gap-2">
+      <i data-lucide="search" class="w-4 h-4 text-slate-400 shrink-0"></i>
+      <input id="search-input" type="text" placeholder="Filter messages or file names..." class="flex-1 bg-transparent text-sm text-white placeholder-slate-500 focus:outline-none" />
+      <button id="search-clear-btn" type="button" class="text-xs text-slate-400 hover:text-white px-2 py-1">Clear</button>
+    </div>
+
+    <!-- Pinned Join Request Banner (Host Only) -->
+    <div id="host-join-pin-banner" class="hidden shrink-0 bg-amber-950/85 border-b border-amber-500/40 px-4 py-2.5 flex items-center justify-between gap-3">
+      <div class="flex items-center gap-2.5 min-w-0">
+        <span class="w-2 h-2 rounded-full bg-amber-400 animate-ping shrink-0"></span>
+        <div class="min-w-0">
+          <p id="host-join-pin-text" class="text-xs font-semibold text-amber-100 truncate"></p>
+          <p id="host-join-pin-sub" class="text-[11px] text-amber-300/80 truncate"></p>
+        </div>
+      </div>
+      <div class="flex items-center gap-1.5 shrink-0">
+        <button id="host-pin-accept-btn" type="button" class="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold transition">Accept</button>
+        <button id="host-pin-decline-btn" type="button" class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-rose-600/40 text-slate-200 text-xs font-medium transition">Decline</button>
+        <button id="host-pin-view-btn" type="button" class="hidden sm:inline-flex px-2.5 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 border border-amber-400/30 text-amber-200 text-xs font-medium transition">View All</button>
+      </div>
+    </div>
+
+    <!-- Pinned Chat Message Banner -->
+    <div id="pinned-message-banner" class="hidden shrink-0 bg-slate-900/95 border-b border-slate-800 px-4 py-2 flex items-center justify-between gap-3">
+      <button id="pinned-jump-btn" type="button" class="flex items-center gap-2 min-w-0 text-left flex-1">
+        <i data-lucide="pin" class="w-3.5 h-3.5 text-indigo-400 shrink-0"></i>
+        <div class="min-w-0">
+          <p class="text-[10px] font-semibold uppercase tracking-wider text-indigo-300">Pinned Message • <span id="pinned-sender"></span></p>
+          <p id="pinned-text" class="text-xs text-slate-300 truncate"></p>
+        </div>
+      </button>
+      <button id="unpin-message-btn" type="button" class="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition shrink-0" title="Unpin message" aria-label="Unpin message">
+        <i data-lucide="x" class="w-3.5 h-3.5"></i>
+      </button>
+    </div>
+
+    <!-- Main Chat Area + Drag & Drop Overlay -->
+    <div id="drop-zone" class="relative flex-1 flex flex-col min-h-0 overflow-hidden bg-slate-950">
+      <!-- Waiting for Host Approval Overlay -->
+      <div id="waiting-approval-view" class="hidden absolute inset-0 z-40 bg-slate-950/95 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center">
+        <div class="w-full max-w-sm bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-2xl">
+          <div class="w-12 h-12 rounded-2xl bg-indigo-500/15 border border-indigo-500/30 flex items-center justify-center text-indigo-400 mx-auto mb-4">
+            <i data-lucide="clock" class="w-6 h-6 animate-pulse"></i>
+          </div>
+          <h3 class="text-base font-semibold text-white">Waiting for Host Approval</h3>
+          <p class="text-xs text-slate-400 mt-2 leading-relaxed">
+            Your request to join Room <span id="waiting-room-code" class="font-mono-code text-indigo-300 font-semibold"></span> has been sent. You will enter automatically once the host accepts you.
+          </p>
+          <button id="waiting-leave-btn" type="button" class="mt-5 w-full py-2.5 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold transition">Cancel &amp; Leave</button>
+        </div>
+      </div>
+      <!-- Drag Overlay -->
+      <div id="drag-overlay" class="hidden absolute inset-0 z-30 bg-indigo-950/85 backdrop-blur-sm border-2 border-dashed border-indigo-400 m-3 rounded-2xl flex flex-col items-center justify-center text-center p-6 pointer-events-none">
+        <div class="w-14 h-14 rounded-2xl bg-indigo-500/20 flex items-center justify-center text-indigo-300 mb-3">
+          <i data-lucide="upload-cloud" class="w-7 h-7"></i>
+        </div>
+        <p class="text-base font-semibold text-white">Drop files to send to Room <span id="drop-room-code" class="font-mono-code text-indigo-300"></span></p>
+        <p class="text-xs text-slate-300 mt-1">Images, PDFs, audio, code, or any document</p>
+      </div>
+
+      <!-- Messages List -->
+      <div id="messages-list" class="flex-1 overflow-y-auto chat-scroll p-4 sm:p-6 space-y-4"></div>
+
+      <!-- Typing Indicator -->
+      <div id="typing-indicator" class="hidden px-5 pb-2 text-xs text-slate-400 flex items-center gap-2">
+        <span class="inline-flex gap-1">
+          <span class="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-bounce"></span>
+          <span class="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-bounce" style="animation-delay: 0.12s"></span>
+          <span class="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-bounce" style="animation-delay: 0.24s"></span>
+        </span>
+        <span id="typing-text">Someone is typing...</span>
+      </div>
+
+      <!-- Edit Message Banner -->
+      <div id="edit-banner" class="hidden shrink-0 bg-indigo-950/60 border-t border-indigo-500/30 px-4 py-2 flex items-center justify-between gap-3">
+        <div class="flex items-center gap-2 min-w-0 border-l-2 border-indigo-400 pl-2.5">
+          <div class="min-w-0">
+            <p class="text-[11px] font-semibold text-indigo-300">Editing message</p>
+            <p id="edit-target-text" class="text-xs text-slate-400 truncate max-w-md"></p>
+          </div>
+        </div>
+        <button id="cancel-edit-btn" type="button" class="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition" aria-label="Cancel edit">
+          <i data-lucide="x" class="w-4 h-4"></i>
+        </button>
+      </div>
+
+      <!-- Reply Preview Banner -->
+      <div id="reply-banner" class="hidden shrink-0 bg-slate-900/95 border-t border-slate-800 px-4 py-2 flex items-center justify-between gap-3">
+        <div class="flex items-center gap-2 min-w-0 border-l-2 border-indigo-400 pl-2.5">
+          <div class="min-w-0">
+            <p class="text-[11px] font-semibold text-indigo-300">Replying to <span id="reply-target-sender"></span></p>
+            <p id="reply-target-text" class="text-xs text-slate-400 truncate max-w-md"></p>
+          </div>
+        </div>
+        <button id="cancel-reply-btn" type="button" class="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition" aria-label="Cancel reply">
+          <i data-lucide="x" class="w-4 h-4"></i>
+        </button>
+      </div>
+
+      <!-- Pending Files Preview Bar -->
+      <div id="pending-files-bar" class="hidden shrink-0 bg-slate-900/95 border-t border-slate-800 px-4 py-2.5 flex items-center gap-2 overflow-x-auto"></div>
+
+      <!-- Emoji Picker Popover -->
+      <div id="emoji-popover" class="hidden absolute bottom-24 left-4 z-40 bg-slate-900 border border-slate-700 rounded-2xl p-3 shadow-2xl w-64">
+        <div class="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-2">Quick Emojis</div>
+        <div id="emoji-grid" class="grid grid-cols-6 gap-1.5 text-xl"></div>
+      </div>
+
+      <!-- Voice Recording Bar -->
+      <div id="recording-bar" class="hidden shrink-0 bg-rose-950/60 border-t border-rose-500/30 px-4 py-2.5 flex items-center justify-between gap-3">
+        <div class="flex items-center gap-2.5">
+          <span class="w-2.5 h-2.5 rounded-full bg-rose-500 animate-pulse"></span>
+          <span class="text-xs font-semibold text-rose-200">Recording voice note</span>
+          <span id="recording-timer" class="font-mono-code text-xs text-rose-300">0:00</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <button id="cancel-record-btn" type="button" class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs text-slate-200 transition">Cancel</button>
+          <button id="send-record-btn" type="button" class="px-3 py-1 rounded-lg bg-rose-600 hover:bg-rose-500 text-xs font-semibold text-white transition">Send Voice</button>
+        </div>
+      </div>
+
+      <!-- Composer -->
+      <footer class="shrink-0 bg-slate-900/95 border-t border-slate-800 p-3 sm:p-4">
+        <form id="message-form" class="max-w-4xl mx-auto flex flex-col gap-2">
+          <div class="flex items-center justify-between gap-2 px-1">
+            <div class="flex items-center gap-1.5">
+              <button id="open-poll-btn" type="button" class="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-800/70 hover:bg-slate-800 text-[11px] font-medium text-slate-300 transition">
+                <i data-lucide="bar-chart-2" class="w-3.5 h-3.5 text-indigo-400"></i>
+                Poll
+              </button>
+              <button id="view-once-btn" type="button" aria-pressed="false" class="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-800/70 hover:bg-slate-800 text-[11px] font-medium text-slate-300 transition" title="Send as View-Once (One-Time) message">
+                <i data-lucide="eye-off" class="w-3.5 h-3.5 text-emerald-400"></i>
+                <span>1x View Once</span>
+              </button>
+              <div class="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-800/70 text-[11px] text-slate-300">
+                <i data-lucide="timer" class="w-3.5 h-3.5 text-amber-400"></i>
+                <label for="ttl-select" class="sr-only">Auto-expire timer</label>
+                <select id="ttl-select" class="bg-transparent text-[11px] font-medium text-slate-200 focus:outline-none cursor-pointer">
+                  <option value="0" class="bg-slate-900">Expire: Off</option>
+                  <option value="30000" class="bg-slate-900">Expire: 30s</option>
+                  <option value="120000" class="bg-slate-900">Expire: 2m</option>
+                  <option value="600000" class="bg-slate-900">Expire: 10m</option>
+                </select>
+              </div>
+              <div id="dm-target-wrap" class="hidden inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-amber-500/15 border border-amber-500/30 text-[11px] text-amber-200">
+                <i data-lucide="user-check" class="w-3.5 h-3.5 text-amber-400"></i>
+                <label for="dm-target-select" class="sr-only">Message recipient</label>
+                <select id="dm-target-select" class="bg-transparent text-[11px] font-medium text-amber-200 focus:outline-none cursor-pointer max-w-[140px]">
+                  <option value="" class="bg-slate-900 text-slate-200">To: Everyone</option>
+                </select>
+              </div>
+            </div>
+            <span class="text-[10px] text-slate-500 hidden sm:inline">Max 15 MB per cloud file</span>
+          </div>
+
+          <div class="flex items-end gap-1.5 sm:gap-2">
+            <input id="file-input" type="file" multiple class="hidden" />
+            <button id="attach-btn" type="button" class="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 transition shrink-0" title="Attach files" aria-label="Attach files">
+              <i data-lucide="paperclip" class="w-5 h-5"></i>
+            </button>
+            <button id="mic-btn" type="button" class="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 transition shrink-0" title="Record voice note" aria-label="Record voice note">
+              <i data-lucide="mic" class="w-5 h-5"></i>
+            </button>
+            <button id="emoji-btn" type="button" class="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 transition shrink-0 hidden sm:inline-flex" title="Insert emoji" aria-label="Insert emoji">
+              <i data-lucide="smile" class="w-5 h-5"></i>
+            </button>
+            <div class="flex-1 bg-slate-950 border border-slate-800 focus-within:border-indigo-500 focus-within:ring-2 focus-within:ring-indigo-500/20 rounded-2xl px-3.5 py-2 transition">
+              <textarea id="message-input" rows="1" placeholder="Type a message or drop a file..." class="w-full bg-transparent text-sm text-white placeholder-slate-500 resize-none focus:outline-none max-h-32 leading-relaxed"></textarea>
+            </div>
+            <button id="send-btn" type="submit" class="p-2.5 sm:px-4 sm:py-2.5 rounded-xl room-accent-bg hover:opacity-90 active:scale-95 text-white font-medium text-sm flex items-center gap-1.5 shadow-lg transition shrink-0" aria-label="Send message">
+              <span class="hidden sm:inline">Send</span>
+              <i data-lucide="send" class="w-4 h-4"></i>
+            </button>
+          </div>
+        </form>
+      </footer>
+    </div>
+  </section>
+
+  <script>
+    (function () {
+      const STORAGE_PREFIX = 'pinroom_v2_';
+      const CLOUD_TOPIC_PREFIX = 'pinroom_chat_v1_';
+      const HOST_PASSWORD = 'ssssr\u20B91432';
+      const ROOM_PALETTE = ['#6366f1', '#10b981', '#f43f5e', '#f59e0b', '#06b6d4', '#a855f7', '#ec4899', '#14b8a6', '#3b82f6', '#f97316'];
+
+      function getDefaultRoomColor(code) {
+        let hash = 0;
+        const s = String(code || '000000');
+        for (let i = 0; i < s.length; i++) {
+          hash = (hash * 31 + s.charCodeAt(i)) >>> 0;
+        }
+        return ROOM_PALETTE[hash % ROOM_PALETTE.length];
+      }
+      const MAX_PERSIST_BYTES = 1.5 * 1024 * 1024;
+      const MAX_STORED_MESSAGES = 300;
+      const MAX_VISIBLE_MESSAGES = 200;
+      const QUICK_EMOJIS = ['😀', '😂', '😍', '🥳', '👍', '🔥', '🎉', '🙏', '💡', '📎', '✅', '🚀', '❤️', '👀', '🤔', '👏', '💯', '⚡'];
+      const REACTION_EMOJIS = ['👍', '❤️', '😂', '🔥'];
+
+      // Inline SVGs for message nodes so appending 100+ messages never triggers full-DOM lucide scans
+      const SVG_TIMER = '<svg class="w-3 h-3 inline-block" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2 2"/><path d="M5 3 2 6"/><path d="m22 6-3-3"/></svg>';
+      const SVG_FILE = '<svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg>';
+      const SVG_DOWNLOAD = '<svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>';
+
+      function getOrCreateClientId() {
+        try {
+          let cid = localStorage.getItem('pinroom_client_id');
+          if (!cid) {
+            cid = 'c-' + Math.random().toString(36).slice(2, 10) + '-' + Date.now().toString(36);
+            localStorage.setItem('pinroom_client_id', cid);
+          }
+          return cid;
+        } catch (_) {
+          return 'c-' + Math.random().toString(36).slice(2, 10);
+        }
+      }
+
+      const state = {
+        clientId: getOrCreateClientId(),
+        roomCode: null,
+        roomName: '',
+        roomColor: '#6366f1',
+        userName: '',
+        isHost: false,
+        admissionStatus: 'approved',
+        joinSessionId: null,
+        joinAttemptAt: 0,
+        pendingRequests: [],
+        members: [],
+        removedClients: new Set(),
+        removedAt: new Map(),
+        joinRequestInterval: null,
+        senderMode: 'me',
+        messages: [],
+        msgIndex: new Set(),
+        activePeers: new Map(), // clientId -> lastSeenMs
+        pendingFiles: [],
+        replyTo: null,
+        editingMsgId: null,
+        viewOnceMode: false,
+        viewOnceTimers: new Map(),
+        pinnedMsgId: null,
+        starredOnly: false,
+        searchQuery: '',
+        drawerOpen: false,
+        drawerTab: 'all',
+        soundEnabled: true,
+        unreadCount: 0,
+        channel: null,
+        streamAbort: null,
+        reconnectTimer: null,
+        saveTimer: null,
+        expiryTimer: null,
+        lastNtfyId: null,
+        consecutiveErrors: 0,
+        cloudOnline: false,
+        typingTimeout: null,
+        mediaRecorder: null,
+        recordChunks: [],
+        recordTimer: null,
+        recordSeconds: 0,
+        recordCancelFlag: false
+      };
+
+      // DOM Elements
+      const lobbyView = document.getElementById('lobby-view');
+      const roomView = document.getElementById('room-view');
+      const pinInputs = Array.from(document.querySelectorAll('.pin-input'));
+      const pinError = document.getElementById('pin-error');
+      const nameError = document.getElementById('name-error');
+      const nicknameInput = document.getElementById('nickname-input');
+      try {
+        const savedName = localStorage.getItem('pinroom_username');
+        if (savedName) nicknameInput.value = savedName;
+      } catch (_) {}
+      nicknameInput.addEventListener('input', () => {
+        nameError.classList.add('hidden');
+      });
+      const joinForm = document.getElementById('join-form');
+      const generateCodeBtn = document.getElementById('generate-code-btn');
+      const quickCodeBtns = document.querySelectorAll('.quick-code-btn');
+
+      const leaveRoomBtn = document.getElementById('leave-room-btn');
+      const copyCodeBtn = document.getElementById('copy-code-btn');
+      const roomCodeDisplay = document.getElementById('room-code-display');
+      const dropRoomCode = document.getElementById('drop-room-code');
+      const userBadgeName = document.getElementById('user-badge-name');
+      const syncBadge = document.getElementById('sync-badge');
+      const syncDot = document.getElementById('sync-dot');
+      const peerStatusText = document.getElementById('peer-status-text');
+      const switchSenderBtn = document.getElementById('switch-sender-btn');
+      const senderModeLabel = document.getElementById('sender-mode-label');
+      const clearChatBtn = document.getElementById('clear-chat-btn');
+      const soundToggleBtn = document.getElementById('sound-toggle-btn');
+
+      const openDrawerBtn = document.getElementById('open-drawer-btn');
+      const closeDrawerBtn = document.getElementById('close-drawer-btn');
+      const filesDrawerBackdrop = document.getElementById('files-drawer-backdrop');
+      const filesDrawer = document.getElementById('files-drawer');
+      const drawerFileCount = document.getElementById('drawer-file-count');
+      const drawerFilesList = document.getElementById('drawer-files-list');
+      const drawerTabBtns = document.querySelectorAll('.drawer-tab-btn');
+
+      const toggleSearchBtn = document.getElementById('toggle-search-btn');
+      const searchBar = document.getElementById('search-bar');
+      const searchInput = document.getElementById('search-input');
+      const searchClearBtn = document.getElementById('search-clear-btn');
+
+      const dropZone = document.getElementById('drop-zone');
+      const dragOverlay = document.getElementById('drag-overlay');
+      const messagesList = document.getElementById('messages-list');
+      const typingIndicator = document.getElementById('typing-indicator');
+      const typingText = document.getElementById('typing-text');
+
+      const replyBanner = document.getElementById('reply-banner');
+      const replyTargetSender = document.getElementById('reply-target-sender');
+      const replyTargetText = document.getElementById('reply-target-text');
+      const cancelReplyBtn = document.getElementById('cancel-reply-btn');
+
+      const pendingFilesBar = document.getElementById('pending-files-bar');
+      const recordingBar = document.getElementById('recording-bar');
+      const recordingTimer = document.getElementById('recording-timer');
+      const cancelRecordBtn = document.getElementById('cancel-record-btn');
+      const sendRecordBtn = document.getElementById('send-record-btn');
+
+      const messageForm = document.getElementById('message-form');
+      const messageInput = document.getElementById('message-input');
+      const fileInput = document.getElementById('file-input');
+      const attachBtn = document.getElementById('attach-btn');
+      const micBtn = document.getElementById('mic-btn');
+      const emojiBtn = document.getElementById('emoji-btn');
+      const emojiPopover = document.getElementById('emoji-popover');
+      const emojiGrid = document.getElementById('emoji-grid');
+      const ttlSelect = document.getElementById('ttl-select');
+
+      const openPollBtn = document.getElementById('open-poll-btn');
+      const pollModal = document.getElementById('poll-modal');
+      const pollCloseBtn = document.getElementById('poll-close-btn');
+      const pollCancelBtn = document.getElementById('poll-cancel-btn');
+      const pollForm = document.getElementById('poll-form');
+      const pollQuestionInput = document.getElementById('poll-question');
+      const pollOptionInputs = Array.from(document.querySelectorAll('.poll-option-input'));
+      const pollError = document.getElementById('poll-error');
+
+      const lightboxModal = document.getElementById('lightbox-modal');
+      const lightboxImg = document.getElementById('lightbox-img');
+      const lightboxTitle = document.getElementById('lightbox-title');
+      const lightboxDownload = document.getElementById('lightbox-download');
+      const lightboxClose = document.getElementById('lightbox-close');
+
+      const confirmModal = document.getElementById('confirm-modal');
+      const confirmCancel = document.getElementById('confirm-cancel');
+      const confirmProceed = document.getElementById('confirm-proceed');
+      const toastContainer = document.getElementById('toast-container');
+      const openHostModalBtn = document.getElementById('open-host-modal-btn');
+      const hostAuthModal = document.getElementById('host-auth-modal');
+      const hostAuthClose = document.getElementById('host-auth-close');
+      const hostAuthCancel = document.getElementById('host-auth-cancel');
+      const hostAuthForm = document.getElementById('host-auth-form');
+      const hostRoomCodeInput = document.getElementById('host-room-code');
+      const hostRandomCodeBtn = document.getElementById('host-random-code-btn');
+      const hostNameInput = document.getElementById('host-name-input');
+      const hostPasswordInput = document.getElementById('host-password-input');
+      const hostPasswordToggle = document.getElementById('host-password-toggle');
+      const hostAuthError = document.getElementById('host-auth-error');
+
+      const hostRoleBadge = document.getElementById('host-role-badge');
+      const hostControlsBtn = document.getElementById('host-controls-btn');
+      const hostPendingBadge = document.getElementById('host-pending-badge');
+      const hostControlsModal = document.getElementById('host-controls-modal');
+      const hostControlsClose = document.getElementById('host-controls-close');
+      const hostPendingCount = document.getElementById('host-pending-count');
+      const hostPendingList = document.getElementById('host-pending-list');
+      const hostMembersCount = document.getElementById('host-members-count');
+      const hostMembersList = document.getElementById('host-members-list');
+
+      const waitingApprovalView = document.getElementById('waiting-approval-view');
+      const waitingRoomCode = document.getElementById('waiting-room-code');
+      const waitingLeaveBtn = document.getElementById('waiting-leave-btn');
+      const roomNameDisplay = document.getElementById('room-name-display');
+      const hostRoomNameInput = document.getElementById('host-room-name-input');
+      const hostRoomColorInput = document.getElementById('host-room-color-input');
+      const hostAuthColorHex = document.getElementById('host-auth-color-hex');
+      const hostAuthSwatches = document.getElementById('host-auth-swatches');
+      const ctrlRoomNameInput = document.getElementById('ctrl-room-name-input');
+      const ctrlRoomColorInput = document.getElementById('ctrl-room-color-input');
+      const ctrlSaveRoomBtn = document.getElementById('ctrl-save-room-btn');
+      const ctrlColorSwatches = document.getElementById('ctrl-color-swatches');
+      const dmTargetWrap = document.getElementById('dm-target-wrap');
+      const dmTargetSelect = document.getElementById('dm-target-select');
+      const starredFilterBtn = document.getElementById('starred-filter-btn');
+      const hostJoinPinBanner = document.getElementById('host-join-pin-banner');
+      const hostJoinPinText = document.getElementById('host-join-pin-text');
+      const hostJoinPinSub = document.getElementById('host-join-pin-sub');
+      const hostPinAcceptBtn = document.getElementById('host-pin-accept-btn');
+      const hostPinDeclineBtn = document.getElementById('host-pin-decline-btn');
+      const hostPinViewBtn = document.getElementById('host-pin-view-btn');
+      const pinnedMessageBanner = document.getElementById('pinned-message-banner');
+      const pinnedJumpBtn = document.getElementById('pinned-jump-btn');
+      const pinnedSender = document.getElementById('pinned-sender');
+      const pinnedText = document.getElementById('pinned-text');
+      const unpinMessageBtn = document.getElementById('unpin-message-btn');
+      const editBanner = document.getElementById('edit-banner');
+      const editTargetText = document.getElementById('edit-target-text');
+      const cancelEditBtn = document.getElementById('cancel-edit-btn');
+      const viewOnceBtn = document.getElementById('view-once-btn');
+
+      function refreshIcons() {
+        if (window.lucide && typeof window.lucide.createIcons === 'function') {
+          window.lucide.createIcons();
+        }
+      }
+
+      // Synthesized chime via Web Audio API (throttled for 100-user bursts)
+      let lastChimeAt = 0;
+      function playNotificationChime() {
+        if (!state.soundEnabled) return;
+        const now = Date.now();
+        if (now - lastChimeAt < 1200) return;
+        lastChimeAt = now;
+        try {
+          const AudioCtx = window.AudioContext || window.webkitAudioContext;
+          if (!AudioCtx) return;
+          const ctx = new AudioCtx();
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(660, ctx.currentTime);
+          osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.09);
+          gain.gain.setValueAtTime(0.07, ctx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.2);
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start();
+          osc.stop(ctx.currentTime + 0.21);
+        } catch (_) {}
+      }
+
+      function updateDocumentTitle() {
+        if (!state.roomCode) {
+          document.title = 'PinRoom — 6-Digit Code Chat & File Share';
+          return;
+        }
+        const label = state.roomName ? `${state.roomName} (#${state.roomCode})` : `#${state.roomCode}`;
+        document.title = state.unreadCount > 0
+          ? `(${state.unreadCount}) PinRoom ${label}`
+          : `PinRoom ${label}`;
+      }
+
+      function notifyIncomingMessage(isSelf) {
+        if (isSelf) return;
+        playNotificationChime();
+        if (document.hidden) {
+          state.unreadCount++;
+          updateDocumentTitle();
+        }
+      }
+
+      soundToggleBtn.addEventListener('click', () => {
+        state.soundEnabled = !state.soundEnabled;
+        soundToggleBtn.innerHTML = state.soundEnabled
+          ? '<i data-lucide="volume-2" class="w-4 h-4"></i>'
+          : '<i data-lucide="volume-x" class="w-4 h-4 text-slate-500"></i>';
+        refreshIcons();
+        showToast(state.soundEnabled ? 'Sound alerts on' : 'Sound alerts muted', 'info');
+      });
+
+      function getActiveCount() {
+        const cutoff = Date.now() - 5 * 60 * 1000;
+        let count = 1; // self
+        state.activePeers.forEach((ts, cid) => {
+          if (ts >= cutoff && cid !== state.clientId) count++;
+        });
+        return count;
+      }
+
+      function setSyncStatus(mode) {
+        state.cloudOnline = mode === 'online';
+        const activeCount = getActiveCount();
+        const activeLabel = activeCount > 1 ? ` • ${activeCount} active` : '';
+        if (mode === 'online') {
+          syncBadge.className = 'inline-flex items-center gap-1 text-emerald-400 hover:underline cursor-pointer';
+          syncDot.className = 'w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse';
+          peerStatusText.textContent = `Live Stream${activeLabel}`;
+        } else if (mode === 'connecting') {
+          syncBadge.className = 'inline-flex items-center gap-1 text-indigo-300 hover:underline cursor-pointer';
+          syncDot.className = 'w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse';
+          peerStatusText.textContent = 'Reconnecting...';
+        } else {
+          syncBadge.className = 'inline-flex items-center gap-1 text-amber-400 hover:underline cursor-pointer';
+          syncDot.className = 'w-1.5 h-1.5 rounded-full bg-amber-400';
+          peerStatusText.textContent = 'Offline (Tap to retry)';
+        }
+      }
+
+      function showToast(text, type = 'info') {
+        const colors = {
+          info: 'bg-slate-800 border-slate-700 text-slate-100',
+          success: 'bg-emerald-950/90 border-emerald-700/70 text-emerald-200',
+          error: 'bg-rose-950/90 border-rose-700/70 text-rose-200'
+        };
+        const el = document.createElement('div');
+        el.className = `pointer-events-auto px-3.5 py-2.5 rounded-xl border text-xs font-medium shadow-xl backdrop-blur transition-all ${colors[type] || colors.info}`;
+        el.textContent = text;
+        toastContainer.appendChild(el);
+        setTimeout(() => {
+          el.classList.add('opacity-0', 'translate-y-1');
+          setTimeout(() => el.remove(), 220);
+        }, 2400);
+      }
+
+      function formatBytes(bytes) {
+        if (!bytes || bytes === 0) return '0 B';
+        const k = 1024;
+        const sizes = ['B', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
+      }
+
+      function formatTime(ts) {
+        return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      }
+
+      function formatRemaining(ms) {
+        const secs = Math.max(0, Math.ceil(ms / 1000));
+        if (secs < 60) return `${secs}s`;
+        const mins = Math.floor(secs / 60);
+        const rem = secs % 60;
+        return rem > 0 ? `${mins}m ${rem}s` : `${mins}m`;
+      }
+
+      function escapeHtml(str) {
+        return String(str)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#39;');
+      }
+
+      function linkify(text) {
+        const escaped = escapeHtml(text);
+        return escaped.replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener noreferrer" class="underline decoration-indigo-400/70 hover:text-indigo-200 break-all">$1</a>');
+      }
+
+      // PIN Input Handling
+      function getEnteredPin() {
+        return pinInputs.map(inp => inp.value.trim()).join('');
+      }
+
+      function setPinValue(code) {
+        const digits = code.replace(/\D/g, '').slice(0, 6).split('');
+        pinInputs.forEach((inp, idx) => {
+          inp.value = digits[idx] || '';
+        });
+        pinError.classList.add('hidden');
+      }
+
+      pinInputs.forEach((input, idx) => {
+        input.addEventListener('input', (e) => {
+          const val = e.target.value.replace(/\D/g, '');
+          e.target.value = val ? val[0] : '';
+          pinError.classList.add('hidden');
+          if (val && idx < pinInputs.length - 1) {
+            pinInputs[idx + 1].focus();
+          }
+        });
+
+        input.addEventListener('keydown', (e) => {
+          if (e.key === 'Backspace' && !e.target.value && idx > 0) {
+            pinInputs[idx - 1].focus();
+          } else if (e.key === 'ArrowLeft' && idx > 0) {
+            pinInputs[idx - 1].focus();
+          } else if (e.key === 'ArrowRight' && idx < pinInputs.length - 1) {
+            pinInputs[idx + 1].focus();
+          }
+        });
+
+        input.addEventListener('paste', (e) => {
+          e.preventDefault();
+          const pasted = (e.clipboardData || window.clipboardData).getData('text').replace(/\D/g, '');
+          if (pasted) {
+            setPinValue(pasted);
+            const focusIdx = Math.min(pasted.length, pinInputs.length - 1);
+            pinInputs[focusIdx].focus();
+          }
+        });
+      });
+
+      generateCodeBtn.addEventListener('click', () => {
+        const code = String(Math.floor(100000 + Math.random() * 900000));
+        setPinValue(code);
+        showToast(`Generated room code #${code}`, 'info');
+      });
+
+      quickCodeBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+          const code = btn.getAttribute('data-quick-code');
+          setPinValue(code);
+          if (!nicknameInput.value.trim()) {
+            nameError.classList.remove('hidden');
+            nicknameInput.focus();
+            showToast('Enter your name to join #' + code, 'info');
+            return;
+          }
+          enterRoom(code, false);
+        });
+      });
+
+      joinForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const code = getEnteredPin();
+        const name = nicknameInput.value.trim();
+        let hasError = false;
+        if (code.length !== 6) {
+          pinError.classList.remove('hidden');
+          const firstEmpty = pinInputs.find(inp => !inp.value);
+          if (firstEmpty) firstEmpty.focus();
+          hasError = true;
+        }
+        if (!name) {
+          nameError.classList.remove('hidden');
+          if (!hasError) nicknameInput.focus();
+          hasError = true;
+        }
+        if (hasError) return;
+        enterRoom(code, false);
+      });
+
+      // Storage (debounced for 100-user bursts) & Message Cap
+      function rebuildMsgIndex() {
+        state.msgIndex = new Set(state.messages.map(m => m.id));
+      }
+
+      function trimMessagesIfNeeded() {
+        if (state.messages.length > MAX_STORED_MESSAGES) {
+          state.messages = state.messages.slice(-MAX_STORED_MESSAGES);
+          rebuildMsgIndex();
+        }
+      }
+
+      function saveRoomMessagesNow() {
+        if (!state.roomCode) return;
+        try {
+          const serializable = state.messages.slice(-MAX_STORED_MESSAGES).map(m => {
+            if (m.files && m.files.length) {
+              return {
+                ...m,
+                files: m.files.map(f => ({
+                  name: f.name,
+                  size: f.size,
+                  mime: f.mime,
+                  remoteUrl: f.remoteUrl || null,
+                  dataUrl: f.dataUrl && !f.dataUrl.startsWith('blob:') && f.size <= MAX_PERSIST_BYTES ? f.dataUrl : null
+                }))
+              };
+            }
+            return m;
+          });
+          localStorage.setItem(STORAGE_PREFIX + state.roomCode, JSON.stringify(serializable));
+        } catch (_) {}
+      }
+
+      function scheduleSaveRoomMessages() {
+        if (state.saveTimer) return;
+        state.saveTimer = setTimeout(() => {
+          state.saveTimer = null;
+          saveRoomMessagesNow();
+        }, 600);
+      }
+
+      function pruneExpiredMessages() {
+        const now = Date.now();
+        let removed = false;
+        state.messages = state.messages.filter(m => {
+          if (m.expiresAt && m.expiresAt <= now) {
+            const el = messagesList.querySelector(`[data-msg-id="${m.id}"]`);
+            if (el) el.remove();
+            state.msgIndex.delete(m.id);
+            removed = true;
+            return false;
+          }
+          return true;
+        });
+        if (removed) {
+          scheduleSaveRoomMessages();
+          if (state.drawerOpen) renderDrawer();
+        }
+        document.querySelectorAll('[data-expires-at]').forEach(el => {
+          const exp = Number(el.getAttribute('data-expires-at'));
+          if (exp) el.textContent = formatRemaining(exp - now);
+        });
+      }
+
+      function loadRoomMessages(code) {
+        try {
+          const raw = localStorage.getItem(STORAGE_PREFIX + code);
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            if (Array.isArray(parsed)) {
+              const now = Date.now();
+              return parsed.filter(m => !m.expiresAt || m.expiresAt > now).slice(-MAX_STORED_MESSAGES);
+            }
+          }
+        } catch (_) {}
+        return [
+          {
+            id: 'sys-welcome-' + code,
+            type: 'system',
+            text: `Room #${code} is live. Friends who enter #${code} can chat, vote, and share files with you here.`,
+            timestamp: Date.now()
+          }
+        ];
+      }
+
+      function broadcastLocalEvent(payload) {
+        if (!state.channel) return;
+        try {
+          state.channel.postMessage(payload);
+        } catch (_) {}
+      }
+
+      function getTopicName(code) {
+        return CLOUD_TOPIC_PREFIX + code;
+      }
+
+      async function publishCloudMessage(msg) {
+        if (!state.roomCode) return;
+        const topic = getTopicName(state.roomCode);
+        try {
+          const res = await fetch('https://ntfy.sh/', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              topic,
+              title: 'pinroom_msg',
+              message: JSON.stringify({
+                v: 1,
+                kind: msg.type === 'poll' ? 'poll' : 'chat',
+                clientId: state.clientId,
+                msgId: msg.id,
+                sender: msg.sender,
+                text: msg.text,
+                viewOnce: Boolean(msg.viewOnce),
+                isPrivate: Boolean(msg.isPrivate),
+                targetClientId: msg.targetClientId || null,
+                targetName: msg.targetName || '',
+                replyTo: msg.replyTo || null,
+                poll: msg.poll || null,
+                expiresAt: msg.expiresAt || null,
+                timestamp: msg.timestamp
+              })
+            })
+          });
+          if (res.ok) {
+            state.consecutiveErrors = 0;
+            setSyncStatus('online');
+          }
+        } catch (_) {}
+      }
+
+      function updateFileProgressUI(progressKey, pct, statusText, isError) {
+        const bar = document.querySelector(`[data-progress-bar="${progressKey}"]`);
+        const label = document.querySelector(`[data-progress-label="${progressKey}"]`);
+        if (bar) {
+          bar.style.width = `${pct}%`;
+          if (isError) bar.classList.replace('bg-indigo-400', 'bg-rose-400');
+        }
+        if (label) {
+          label.textContent = statusText;
+        }
+      }
+
+      function publishCloudFile(fileObj, msgId, fileIndex, sender, captionText, expiresAt) {
+        if (!state.roomCode || !fileObj) return;
+        const progressKey = `${msgId}-${fileIndex}`;
+        const msg = state.messages.find(m => m.id === msgId);
+        const fileEntry = msg && msg.files && msg.files[fileIndex];
+
+        if (fileObj.size > 15 * 1024 * 1024) {
+          if (fileEntry) {
+            fileEntry.uploadStatus = 'error';
+            fileEntry.uploadNote = 'Exceeds 15 MB cloud limit';
+          }
+          updateFileProgressUI(progressKey, 100, 'Too large (>15 MB)', true);
+          showToast(`${fileObj.name} exceeds 15 MB cloud limit`, 'error');
+          return;
+        }
+
+        const topic = getTopicName(state.roomCode);
+        const safeSender = sender.replace(/::/g, ' ');
+        const expTag = expiresAt ? String(expiresAt) : '0';
+        const titleTag = `pinroom_file::${safeSender}::${state.clientId}::${msgId}__${fileIndex}::${expTag}`;
+        const url = `https://ntfy.sh/${topic}?filename=${encodeURIComponent(fileObj.name)}&title=${encodeURIComponent(titleTag)}&message=${encodeURIComponent(captionText || 'Shared a file')}`;
+
+        const xhr = new XMLHttpRequest();
+        xhr.open('PUT', url, true);
+
+        xhr.upload.onprogress = (ev) => {
+          if (ev.lengthComputable && ev.total > 0) {
+            const pct = Math.min(99, Math.round((ev.loaded / ev.total) * 100));
+            if (fileEntry) fileEntry.progress = pct;
+            updateFileProgressUI(progressKey, pct, `Uploading ${pct}%`, false);
+          }
+        };
+
+        xhr.onload = () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            state.consecutiveErrors = 0;
+            setSyncStatus('online');
+            if (fileEntry) {
+              fileEntry.progress = 100;
+              fileEntry.uploadStatus = 'done';
+              try {
+                const resp = JSON.parse(xhr.responseText);
+                if (resp && resp.attachment && resp.attachment.url) {
+                  fileEntry.remoteUrl = resp.attachment.url;
+                }
+              } catch (_) {}
+            }
+            scheduleSaveRoomMessages();
+            updateMessageNodeInPlace(msgId);
+            if (state.drawerOpen) renderDrawer();
+          } else if (xhr.status === 413) {
+            if (fileEntry) {
+              fileEntry.uploadStatus = 'error';
+              fileEntry.uploadNote = 'Too large (>15 MB)';
+            }
+            updateFileProgressUI(progressKey, 100, 'Too large (>15 MB)', true);
+            showToast(`${fileObj.name} exceeds server size limit`, 'error');
+          } else {
+            if (fileEntry) {
+              fileEntry.uploadStatus = 'error';
+              fileEntry.uploadNote = 'Upload failed';
+            }
+            updateFileProgressUI(progressKey, 100, 'Upload failed', true);
+            showToast(`Could not upload ${fileObj.name}`, 'error');
+          }
+        };
+
+        xhr.onerror = () => {
+          if (fileEntry) {
+            fileEntry.uploadStatus = 'error';
+            fileEntry.uploadNote = 'Network error';
+          }
+          updateFileProgressUI(progressKey, 100, 'Network error', true);
+          showToast(`Offline: ${fileObj.name} saved locally only`, 'error');
+        };
+
+        xhr.send(fileObj);
+      }
+
+      async function publishCloudReaction(msgId, reactions) {
+        if (!state.roomCode) return;
+        const topic = getTopicName(state.roomCode);
+        try {
+          await fetch('https://ntfy.sh/', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              topic,
+              title: 'pinroom_react',
+              message: JSON.stringify({
+                v: 1,
+                kind: 'reaction',
+                clientId: state.clientId,
+                msgId,
+                reactions
+              })
+            })
+          });
+        } catch (_) {}
+      }
+
+      async function publishCloudVote(msgId, optionIdx) {
+        if (!state.roomCode) return;
+        const topic = getTopicName(state.roomCode);
+        try {
+          await fetch('https://ntfy.sh/', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              topic,
+              title: 'pinroom_vote',
+              message: JSON.stringify({
+                v: 1,
+                kind: 'vote',
+                clientId: state.clientId,
+                msgId,
+                optionIdx
+              })
+            })
+          });
+        } catch (_) {}
+      }
+
+      function applyVote(msgId, optionIdx, voterId) {
+        const msg = state.messages.find(m => m.id === msgId && m.type === 'poll' && m.poll);
+        if (!msg) return false;
+        msg.poll.votes = msg.poll.votes || {};
+        msg.poll.votes[voterId] = optionIdx;
+        return true;
+      }
+
+      function recordPeerActivity(clientId) {
+        if (!clientId) return;
+        const prevSize = state.activePeers.size;
+        state.activePeers.set(clientId, Date.now());
+        if (state.activePeers.size !== prevSize && state.cloudOnline) {
+          setSyncStatus('online');
+        }
+      }
+
+      function pushAndRenderMessage(msg, forceScroll) {
+        if (state.msgIndex.has(msg.id)) return;
+        state.messages.push(msg);
+        state.msgIndex.add(msg.id);
+        trimMessagesIfNeeded();
+        scheduleSaveRoomMessages();
+        if (state.searchQuery) {
+          renderMessages(forceScroll);
+        } else {
+          appendMessageNode(msg, forceScroll);
+        }
+      }
+
+      function handleIncomingCloudItem(item) {
+        if (!item) return;
+        if (item.id) state.lastNtfyId = item.id;
+        if (item.event !== 'message') return;
+        const now = Date.now();
+
+        if (item.title === 'pinroom_ctrl' && item.message) {
+          try {
+            const payload = JSON.parse(item.message);
+            if (payload && payload.kind) {
+              handleControlEvent(payload);
+            }
+          } catch (_) {}
+          return;
+        }
+
+        if (item.title === 'pinroom_msg' && item.message) {
+          try {
+            const payload = JSON.parse(item.message);
+            if (payload && (payload.kind === 'chat' || payload.kind === 'poll') && payload.msgId) {
+              if (state.removedClients.has(payload.clientId)) return;
+              if (payload.isPrivate && payload.targetClientId !== state.clientId && payload.clientId !== state.clientId) return;
+              if (state.isHost && payload.clientId && payload.clientId !== state.clientId) {
+                ensureMemberTracked(payload.clientId, payload.sender || 'Member');
+              }
+              recordPeerActivity(payload.clientId);
+              if (payload.expiresAt && payload.expiresAt <= now) return;
+              if (state.msgIndex.has(payload.msgId)) return;
+              const isSelf = payload.clientId === state.clientId;
+              pushAndRenderMessage({
+                id: payload.msgId,
+                type: payload.kind === 'poll' ? 'poll' : 'chat',
+                sender: payload.sender || 'Friend',
+                isSelf,
+                viewOnce: Boolean(payload.viewOnce),
+                viewOnceState: payload.viewOnce ? (isSelf ? 'sent' : 'locked') : null,
+                isPrivate: Boolean(payload.isPrivate),
+                targetClientId: payload.targetClientId || null,
+                targetName: payload.targetName || '',
+                text: payload.text || '',
+                replyTo: payload.replyTo || null,
+                poll: payload.poll || null,
+                expiresAt: payload.expiresAt || null,
+                files: [],
+                reactions: {},
+                timestamp: payload.timestamp || (item.time ? item.time * 1000 : now)
+              }, false);
+              notifyIncomingMessage(isSelf);
+            }
+          } catch (_) {}
+          return;
+        }
+
+        if (item.title === 'pinroom_react' && item.message) {
+          try {
+            const payload = JSON.parse(item.message);
+            if (payload && payload.kind === 'reaction' && payload.msgId) {
+              recordPeerActivity(payload.clientId);
+              const target = state.messages.find(m => m.id === payload.msgId);
+              if (target) {
+                target.reactions = payload.reactions || {};
+                scheduleSaveRoomMessages();
+                updateMessageNodeInPlace(payload.msgId);
+              }
+            }
+          } catch (_) {}
+          return;
+        }
+
+        if (item.title === 'pinroom_vote' && item.message) {
+          try {
+            const payload = JSON.parse(item.message);
+            if (payload && payload.kind === 'vote' && payload.msgId) {
+              recordPeerActivity(payload.clientId);
+              if (applyVote(payload.msgId, payload.optionIdx, payload.clientId)) {
+                scheduleSaveRoomMessages();
+                updateMessageNodeInPlace(payload.msgId);
+              }
+            }
+          } catch (_) {}
+          return;
+        }
+
+        if (item.attachment && item.attachment.url) {
+          let sender = 'Friend';
+          let clientId = '';
+          let msgId = 'ntfy-' + item.id;
+          let expiresAt = null;
+          if (item.title && item.title.startsWith('pinroom_file::')) {
+            const parts = item.title.split('::');
+            sender = parts[1] || 'Friend';
+            clientId = parts[2] || '';
+            msgId = (parts[3] || msgId).split('__')[0];
+            if (parts[4] && Number(parts[4]) > 0) {
+              expiresAt = Number(parts[4]);
+            }
+          }
+          recordPeerActivity(clientId);
+          if (expiresAt && expiresAt <= now) return;
+          if (state.msgIndex.has(msgId)) return;
+          const isSelf = clientId === state.clientId;
+          const att = item.attachment;
+          pushAndRenderMessage({
+            id: msgId,
+            type: 'chat',
+            sender,
+            isSelf,
+            text: item.message && item.message !== 'Shared a file' ? item.message : '',
+            expiresAt,
+            files: [{
+              name: att.name || 'file',
+              size: att.size || 0,
+              mime: att.type || 'application/octet-stream',
+              remoteUrl: att.url,
+              dataUrl: null
+            }],
+            reactions: {},
+            timestamp: item.time ? item.time * 1000 : now
+          }, false);
+          if (state.drawerOpen) renderDrawer();
+          notifyIncomingMessage(isSelf);
+        }
+      }
+
+      // High-speed persistent HTTP stream via fetch() with fast jittered reconnect
+      async function startCloudStream() {
+        stopCloudStream();
+        if (!state.roomCode) return;
+        setSyncStatus('connecting');
+
+        const topic = getTopicName(state.roomCode);
+        const sinceParam = state.lastNtfyId || '15m';
+        const url = `https://ntfy.sh/${topic}/json?since=${encodeURIComponent(sinceParam)}`;
+        const controller = new AbortController();
+        state.streamAbort = controller;
+
+        try {
+          const res = await fetch(url, {
+            cache: 'no-store',
+            signal: controller.signal
+          });
+          if (!res.ok) throw new Error('HTTP ' + res.status);
+
+          state.consecutiveErrors = 0;
+          setSyncStatus('online');
+
+          if (res.body && typeof res.body.getReader === 'function') {
+            const reader = res.body.getReader();
+            const decoder = new TextDecoder();
+            let buffer = '';
+            while (state.roomCode && !controller.signal.aborted) {
+              const { value, done } = await reader.read();
+              if (done) break;
+              buffer += decoder.decode(value, { stream: true });
+              let nlIdx;
+              while ((nlIdx = buffer.indexOf('\n')) !== -1) {
+                const line = buffer.slice(0, nlIdx).trim();
+                buffer = buffer.slice(nlIdx + 1);
+                if (!line) continue;
+                try {
+                  handleIncomingCloudItem(JSON.parse(line));
+                } catch (_) {}
+              }
+            }
+          } else {
+            // Fallback for browsers without ReadableStream
+            const text = await res.text();
+            text.split('\n').forEach(line => {
+              if (!line.trim()) return;
+              try { handleIncomingCloudItem(JSON.parse(line)); } catch (_) {}
+            });
+          }
+
+          if (state.roomCode && !controller.signal.aborted) {
+            scheduleStreamReconnect(400 + Math.random() * 600);
+          }
+        } catch (err) {
+          if (err && err.name === 'AbortError') return;
+          state.consecutiveErrors++;
+          const jitter = Math.random() * 700;
+          const delay = Math.min(8000, 1000 * Math.pow(1.5, Math.min(state.consecutiveErrors - 1, 4))) + jitter;
+          if (state.consecutiveErrors >= 3) {
+            setSyncStatus('offline');
+          } else {
+            setSyncStatus('connecting');
+          }
+          if (state.roomCode) {
+            scheduleStreamReconnect(delay);
+          }
+        }
+      }
+
+      function scheduleStreamReconnect(delayMs) {
+        if (state.reconnectTimer) clearTimeout(state.reconnectTimer);
+        state.reconnectTimer = setTimeout(() => {
+          state.reconnectTimer = null;
+          if (state.roomCode) startCloudStream();
+        }, delayMs);
+      }
+
+      function stopCloudStream() {
+        if (state.reconnectTimer) {
+          clearTimeout(state.reconnectTimer);
+          state.reconnectTimer = null;
+        }
+        if (state.streamAbort) {
+          try { state.streamAbort.abort(); } catch (_) {}
+          state.streamAbort = null;
+        }
+      }
+
+      syncBadge.addEventListener('click', () => {
+        if (!state.roomCode) return;
+        state.consecutiveErrors = 0;
+        startCloudStream();
+      });
+
+      document.addEventListener('visibilitychange', () => {
+        if (!document.hidden && state.roomCode) {
+          state.unreadCount = 0;
+          updateDocumentTitle();
+          if (!state.cloudOnline) {
+            state.consecutiveErrors = 0;
+            startCloudStream();
+          }
+        }
+      });
+
+      window.addEventListener('online', () => {
+        if (state.roomCode) {
+          state.consecutiveErrors = 0;
+          startCloudStream();
+        }
+      });
+
+      async function publishCloudControl(payload) {
+        if (!state.roomCode) return;
+        const topic = getTopicName(state.roomCode);
+        try {
+          await fetch('https://ntfy.sh/', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              topic,
+              title: 'pinroom_ctrl',
+              message: JSON.stringify({ v: 1, ...payload, timestamp: Date.now() })
+            })
+          });
+        } catch (_) {}
+      }
+
+      function sendControlEvent(payload) {
+        broadcastLocalEvent({ type: 'control', payload });
+        publishCloudControl(payload);
+      }
+
+      function ensureMemberTracked(clientId, name) {
+        if (!clientId || state.removedClients.has(clientId)) return;
+        if (!state.members.some(m => m.clientId === clientId)) {
+          state.members.push({
+            clientId,
+            name: name || 'Member',
+            role: 'member',
+            joinedAt: Date.now()
+          });
+          updateHostBadges();
+          refreshDmTargetOptions();
+          if (!hostControlsModal.classList.contains('hidden')) renderHostControls();
+        }
+      }
+
+      function applyRoomTheme(name, color) {
+        state.roomName = (name || '').trim();
+        state.roomColor = color || getDefaultRoomColor(state.roomCode);
+        roomView.style.setProperty('--room-accent', state.roomColor);
+        roomNameDisplay.textContent = state.roomName || `Room #${state.roomCode}`;
+        if (ctrlRoomNameInput) ctrlRoomNameInput.value = state.roomName;
+        if (ctrlRoomColorInput) ctrlRoomColorInput.value = state.roomColor;
+        updateDocumentTitle();
+      }
+
+      function refreshDmTargetOptions() {
+        if (!dmTargetSelect) return;
+        const current = dmTargetSelect.value;
+        const otherMembers = state.members.filter(m => m.role !== 'host' && m.clientId !== state.clientId);
+        dmTargetSelect.innerHTML = '<option value="" class="bg-slate-900 text-slate-200">To: Everyone</option>' +
+          otherMembers.map(m => `<option value="${escapeHtml(m.clientId)}" class="bg-slate-900 text-slate-200">To: ${escapeHtml(m.name)} (Private)</option>`).join('');
+        if (otherMembers.some(m => m.clientId === current)) {
+          dmTargetSelect.value = current;
+        } else {
+          dmTargetSelect.value = '';
+        }
+      }
+
+      function acceptPendingMember(cid) {
+        const req = state.pendingRequests.find(r => r.clientId === cid);
+        if (!req) return;
+        state.pendingRequests = state.pendingRequests.filter(r => r.clientId !== cid);
+        state.removedClients.delete(cid);
+        state.removedAt.delete(cid);
+        if (!state.members.some(m => m.clientId === cid)) {
+          state.members.push({
+            clientId: cid,
+            name: req.name,
+            role: 'member',
+            joinedAt: Date.now()
+          });
+        }
+        sendControlEvent({
+          kind: 'join_accepted',
+          targetClientId: cid,
+          targetSessionId: req.joinSessionId || '',
+          hostName: state.userName,
+          roomName: state.roomName,
+          roomColor: state.roomColor,
+          members: state.members
+        });
+        const sysMsg = {
+          id: 'sys-acc-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
+          type: 'system',
+          text: `${req.name} was accepted by the host.`,
+          timestamp: Date.now()
+        };
+        pushAndRenderMessage(sysMsg, false);
+        broadcastLocalEvent({ type: 'new_message', message: sysMsg });
+        refreshDmTargetOptions();
+        renderHostControls();
+        showToast(`Accepted ${req.name}`, 'success');
+      }
+
+      function declinePendingMember(cid) {
+        const req = state.pendingRequests.find(r => r.clientId === cid);
+        state.pendingRequests = state.pendingRequests.filter(r => r.clientId !== cid);
+        sendControlEvent({
+          kind: 'join_rejected',
+          targetClientId: cid,
+          targetSessionId: req ? req.joinSessionId || '' : ''
+        });
+        renderHostControls();
+        if (req) showToast(`Declined ${req.name}`, 'info');
+      }
+
+      function updatePinnedBanner() {
+        const msg = state.pinnedMsgId ? state.messages.find(m => m.id === state.pinnedMsgId) : null;
+        if (!msg) {
+          state.pinnedMsgId = null;
+          pinnedMessageBanner.classList.add('hidden');
+          return;
+        }
+        pinnedSender.textContent = msg.sender || 'Member';
+        pinnedText.textContent = msg.viewOnce
+          ? '1x View-Once message'
+          : (msg.text || (msg.poll ? msg.poll.question : 'Attachment'));
+        pinnedMessageBanner.classList.remove('hidden');
+      }
+
+      function copyTextToClipboard(text, successMsg) {
+        if (!text) return;
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(text).then(() => {
+            showToast(successMsg || 'Copied to clipboard', 'success');
+          }).catch(() => fallbackCopy(text));
+        } else {
+          fallbackCopy(text);
+        }
+      }
+
+      function deleteMessageLocally(msgId) {
+        const before = state.messages.length;
+        state.messages = state.messages.filter(m => m.id !== msgId);
+        if (state.messages.length !== before) {
+          state.msgIndex.delete(msgId);
+          const el = messagesList.querySelector(`[data-msg-id="${msgId}"]`);
+          if (el) el.remove();
+          if (state.pinnedMsgId === msgId) updatePinnedBanner();
+          scheduleSaveRoomMessages();
+          if (state.drawerOpen) renderDrawer();
+        }
+      }
+
+      function updateHostBadges() {
+        const pendingCount = state.pendingRequests.length;
+        if (hostPendingBadge) {
+          hostPendingBadge.textContent = String(pendingCount);
+          hostPendingBadge.classList.toggle('hidden', pendingCount === 0);
+        }
+        if (hostPendingCount) hostPendingCount.textContent = String(pendingCount);
+        if (hostMembersCount) hostMembersCount.textContent = String(state.members.length);
+        if (hostJoinPinBanner) {
+          if (state.isHost && pendingCount > 0) {
+            const latest = state.pendingRequests[state.pendingRequests.length - 1];
+            hostJoinPinText.textContent = `${latest.name} wants to join Room #${state.roomCode}`;
+            hostJoinPinSub.textContent = pendingCount > 1
+              ? `+${pendingCount - 1} more pending request${pendingCount - 1 > 1 ? 's' : ''}`
+              : `Requested at ${formatTime(latest.timestamp)}`;
+            hostJoinPinBanner.classList.remove('hidden');
+          } else {
+            hostJoinPinBanner.classList.add('hidden');
+          }
+        }
+      }
+
+      function renderHostControls() {
+        updateHostBadges();
+        if (!state.pendingRequests.length) {
+          hostPendingList.innerHTML = '<p class="text-xs text-slate-500 py-2">No pending join requests.</p>';
+        } else {
+          hostPendingList.innerHTML = state.pendingRequests.map(req => `
+            <div class="flex items-center justify-between gap-2 p-2.5 rounded-xl bg-slate-950 border border-slate-800">
+              <div class="min-w-0">
+                <p class="text-xs font-semibold text-white truncate">${escapeHtml(req.name)}</p>
+                <p class="text-[10px] text-slate-400">Requested at ${formatTime(req.timestamp)}</p>
+              </div>
+              <div class="flex items-center gap-1.5 shrink-0">
+                <button type="button" data-accept-client="${escapeHtml(req.clientId)}" class="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold transition">Accept</button>
+                <button type="button" data-decline-client="${escapeHtml(req.clientId)}" class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-rose-600/30 hover:text-rose-300 text-slate-300 text-xs font-medium transition">Decline</button>
+              </div>
+            </div>
+          `).join('');
+        }
+
+        if (!state.members.length) {
+          hostMembersList.innerHTML = '<p class="text-xs text-slate-500 py-2">No members in this room yet.</p>';
+        } else {
+          hostMembersList.innerHTML = state.members.map(mem => `
+            <div class="flex items-center justify-between gap-2 p-2.5 rounded-xl bg-slate-950 border border-slate-800">
+              <div class="flex items-center gap-2 min-w-0">
+                <div class="w-7 h-7 rounded-lg ${mem.role === 'host' ? 'bg-amber-500/20 text-amber-300' : 'bg-indigo-500/20 text-indigo-300'} flex items-center justify-center text-xs font-bold shrink-0">
+                  ${escapeHtml((mem.name || 'U')[0].toUpperCase())}
+                </div>
+                <div class="min-w-0">
+                  <p class="text-xs font-semibold text-white truncate">${escapeHtml(mem.name)}</p>
+                  <p class="text-[10px] text-slate-400">${mem.role === 'host' ? 'Room Host' : 'Member'}</p>
+                </div>
+              </div>
+              ${mem.role === 'host'
+                ? '<span class="px-2 py-0.5 rounded-md bg-amber-500/15 border border-amber-500/30 text-amber-300 text-[10px] font-bold uppercase">Host</span>'
+                : `<div class="flex items-center gap-1.5 shrink-0">
+                    <button type="button" data-dm-client="${escapeHtml(mem.clientId)}" class="px-2.5 py-1 rounded-lg bg-indigo-600/20 hover:bg-indigo-600 text-indigo-300 hover:text-white border border-indigo-500/30 text-xs font-semibold transition">DM</button>
+                    <button type="button" data-remove-client="${escapeHtml(mem.clientId)}" class="px-2.5 py-1 rounded-lg bg-rose-600/20 hover:bg-rose-600 text-rose-300 hover:text-white border border-rose-500/30 text-xs font-semibold transition">Remove</button>
+                  </div>`
+              }
+            </div>
+          `).join('');
+        }
+      }
+
+      function handleControlEvent(payload) {
+        if (!payload || !payload.kind) return;
+
+        if (payload.kind === 'join_request') {
+          if (!state.isHost || !payload.clientId || payload.clientId === state.clientId) return;
+          const remAt = state.removedAt.get(payload.clientId);
+          if (remAt && (payload.timestamp || 0) <= remAt) return;
+          if (state.members.some(m => m.clientId === payload.clientId)) {
+            sendControlEvent({
+              kind: 'join_accepted',
+              targetClientId: payload.clientId,
+              targetSessionId: payload.joinSessionId || '',
+              hostName: state.userName,
+              members: state.members
+            });
+            return;
+          }
+          const existingReq = state.pendingRequests.find(r => r.clientId === payload.clientId);
+          if (existingReq) {
+            if (payload.joinSessionId) existingReq.joinSessionId = payload.joinSessionId;
+            if (payload.name) existingReq.name = payload.name;
+            return;
+          }
+          state.pendingRequests.push({
+            clientId: payload.clientId,
+            joinSessionId: payload.joinSessionId || '',
+            name: payload.name || 'Guest',
+            timestamp: payload.timestamp || Date.now()
+          });
+          updateHostBadges();
+          if (!hostControlsModal.classList.contains('hidden')) renderHostControls();
+          playNotificationChime();
+          showToast(`${payload.name || 'Someone'} wants to join — open Host Controls`, 'info');
+          return;
+        }
+
+        if (payload.kind === 'join_accepted') {
+          if (Array.isArray(payload.members)) {
+            payload.members.forEach(m => {
+              if (!state.members.some(x => x.clientId === m.clientId)) {
+                state.members.push(m);
+              }
+            });
+          }
+          if (typeof payload.roomName === 'string' || payload.roomColor) {
+            applyRoomTheme(
+              typeof payload.roomName === 'string' ? payload.roomName : state.roomName,
+              payload.roomColor || state.roomColor
+            );
+          }
+          const matchesSession = !payload.targetSessionId || payload.targetSessionId === state.joinSessionId;
+          const isFresh = !payload.timestamp || payload.timestamp >= state.joinAttemptAt - 1000;
+          if (!state.isHost && payload.targetClientId === state.clientId && state.admissionStatus !== 'approved' && matchesSession && isFresh) {
+            state.admissionStatus = 'approved';
+            if (state.joinRequestInterval) {
+              clearInterval(state.joinRequestInterval);
+              state.joinRequestInterval = null;
+            }
+            waitingApprovalView.classList.add('hidden');
+            showToast('Host accepted your request! Welcome.', 'success');
+            messageInput.focus();
+          }
+          return;
+        }
+
+        if (payload.kind === 'join_rejected') {
+          const matchesSession = !payload.targetSessionId || payload.targetSessionId === state.joinSessionId;
+          const isFresh = !payload.timestamp || payload.timestamp >= state.joinAttemptAt - 1000;
+          if (!state.isHost && payload.targetClientId === state.clientId && matchesSession && isFresh) {
+            leaveCurrentRoom();
+            showToast('Your request to join was declined by the host.', 'error');
+          }
+          return;
+        }
+
+        if (payload.kind === 'member_removed') {
+          state.members = state.members.filter(m => m.clientId !== payload.targetClientId);
+          state.pendingRequests = state.pendingRequests.filter(r => r.clientId !== payload.targetClientId);
+          const isFresh = !payload.timestamp || payload.timestamp >= state.joinAttemptAt - 1000;
+          if (!state.isHost && payload.targetClientId === state.clientId && isFresh) {
+            leaveCurrentRoom();
+            showToast('You were removed from the room by the host.', 'error');
+            return;
+          }
+          if (state.isHost) {
+            updateHostBadges();
+            if (!hostControlsModal.classList.contains('hidden')) renderHostControls();
+          }
+          return;
+        }
+
+        if (payload.kind === 'host_presence' || payload.kind === 'room_settings') {
+          if (Array.isArray(payload.members)) {
+            payload.members.forEach(m => {
+              if (!state.members.some(x => x.clientId === m.clientId)) {
+                state.members.push(m);
+              }
+            });
+          }
+          if (typeof payload.roomName === 'string' || payload.roomColor) {
+            applyRoomTheme(
+              typeof payload.roomName === 'string' ? payload.roomName : state.roomName,
+              payload.roomColor || state.roomColor
+            );
+          }
+          if (state.isHost) refreshDmTargetOptions();
+          return;
+        }
+
+        if (payload.kind === 'delete_message' && payload.msgId) {
+          deleteMessageLocally(payload.msgId);
+          return;
+        }
+
+        if (payload.kind === 'edit_message' && payload.msgId) {
+          const msg = state.messages.find(m => m.id === payload.msgId);
+          if (msg && typeof payload.text === 'string') {
+            msg.text = payload.text;
+            msg.edited = true;
+            scheduleSaveRoomMessages();
+            updateMessageNodeInPlace(payload.msgId);
+            if (state.pinnedMsgId === payload.msgId) updatePinnedBanner();
+          }
+          return;
+        }
+
+        if (payload.kind === 'pin_message') {
+          state.pinnedMsgId = payload.msgId || null;
+          updatePinnedBanner();
+          return;
+        }
+      }
+
+      function enterRoom(code, asHost = false, hostDisplayName = '', customRoomName = '', customRoomColor = '') {
+        state.roomCode = code;
+        state.isHost = Boolean(asHost);
+        const customName = state.isHost
+          ? (hostDisplayName.trim() || nicknameInput.value.trim() || 'Host')
+          : nicknameInput.value.trim();
+        state.userName = customName || `User-${code.slice(-2)}`;
+        try {
+          if (!state.isHost && customName) localStorage.setItem('pinroom_username', customName);
+        } catch (_) {}
+        state.senderMode = 'me';
+        state.pendingFiles = [];
+        state.replyTo = null;
+        state.editingMsgId = null;
+        state.viewOnceMode = false;
+        state.pinnedMsgId = null;
+        state.starredOnly = false;
+        state.searchQuery = '';
+        if (editBanner) editBanner.classList.add('hidden');
+        if (pinnedMessageBanner) pinnedMessageBanner.classList.add('hidden');
+        if (viewOnceBtn) {
+          viewOnceBtn.setAttribute('aria-pressed', 'false');
+          viewOnceBtn.className = 'inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-800/70 hover:bg-slate-800 text-[11px] font-medium text-slate-300 transition';
+        }
+        if (starredFilterBtn) {
+          starredFilterBtn.className = 'p-2 rounded-xl bg-slate-800/80 hover:bg-slate-800 text-slate-300 transition';
+        }
+        state.unreadCount = 0;
+        state.lastNtfyId = null;
+        state.consecutiveErrors = 0;
+        state.activePeers.clear();
+        state.joinSessionId = 'js-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7);
+        state.joinAttemptAt = Date.now();
+        state.pendingRequests = [];
+        state.removedClients = new Set();
+        state.removedAt = new Map();
+        if (state.joinRequestInterval) {
+          clearInterval(state.joinRequestInterval);
+          state.joinRequestInterval = null;
+        }
+
+        if (state.isHost) {
+          state.admissionStatus = 'approved';
+          state.members = [{
+            clientId: state.clientId,
+            name: state.userName,
+            role: 'host',
+            joinedAt: Date.now()
+          }];
+          hostRoleBadge.classList.remove('hidden');
+          hostControlsBtn.classList.remove('hidden');
+          dmTargetWrap.classList.remove('hidden');
+          waitingApprovalView.classList.add('hidden');
+        } else {
+          state.admissionStatus = 'pending';
+          state.members = [];
+          hostRoleBadge.classList.add('hidden');
+          hostControlsBtn.classList.add('hidden');
+          dmTargetWrap.classList.add('hidden');
+          waitingRoomCode.textContent = '#' + code;
+          waitingApprovalView.classList.remove('hidden');
+        }
+        applyRoomTheme(customRoomName, customRoomColor || getDefaultRoomColor(code));
+        refreshDmTargetOptions();
+        updateHostBadges();
+
+        replyBanner.classList.add('hidden');
+        searchInput.value = '';
+        searchBar.classList.add('hidden');
+        senderModeLabel.textContent = 'As: Me';
+
+        roomCodeDisplay.textContent = code;
+        dropRoomCode.textContent = '#' + code;
+        userBadgeName.textContent = state.userName;
+        updateDocumentTitle();
+
+        state.messages = loadRoomMessages(code);
+        rebuildMsgIndex();
+        saveRoomMessagesNow();
+
+        if (state.channel) {
+          try { state.channel.close(); } catch (_) {}
+        }
+        try {
+          state.channel = new BroadcastChannel('pinroom_channel_' + code);
+          state.channel.onmessage = (event) => {
+            const data = event.data;
+            if (!data) return;
+            if (data.type === 'new_message' && data.message) {
+              const dm = { ...data.message };
+              if (dm.isPrivate && dm.targetClientId !== state.clientId && !dm.isSelf) return;
+              if (dm.viewOnce) {
+                dm.isSelf = false;
+                dm.viewOnceState = 'locked';
+              }
+              pushAndRenderMessage(dm, false);
+              if (state.drawerOpen) renderDrawer();
+              notifyIncomingMessage(false);
+            } else if (data.type === 'reaction') {
+              const target = state.messages.find(m => m.id === data.msgId);
+              if (target) {
+                target.reactions = data.reactions;
+                scheduleSaveRoomMessages();
+                updateMessageNodeInPlace(data.msgId);
+              }
+            } else if (data.type === 'vote') {
+              if (applyVote(data.msgId, data.optionIdx, data.voterId)) {
+                scheduleSaveRoomMessages();
+                updateMessageNodeInPlace(data.msgId);
+              }
+            } else if (data.type === 'clear') {
+              state.messages = loadRoomMessages(code);
+              rebuildMsgIndex();
+              renderMessages(false);
+              if (state.drawerOpen) renderDrawer();
+            } else if (data.type === 'typing') {
+              showRemoteTyping(data.sender);
+            } else if (data.type === 'control' && data.payload) {
+              handleControlEvent(data.payload);
+            }
+          };
+        } catch (_) {
+          state.channel = null;
+        }
+
+        if (state.expiryTimer) clearInterval(state.expiryTimer);
+        state.expiryTimer = setInterval(pruneExpiredMessages, 1000);
+
+        lobbyView.classList.add('hidden');
+        roomView.classList.remove('hidden');
+        renderPendingFiles();
+        renderMessages(true);
+        refreshIcons();
+        startCloudStream();
+        if (state.isHost) {
+          sendControlEvent({
+            kind: 'host_presence',
+            clientId: state.clientId,
+            name: state.userName,
+            roomName: state.roomName,
+            roomColor: state.roomColor,
+            members: state.members
+          });
+          messageInput.focus();
+        } else {
+          const sendJoinReq = () => {
+            if (!state.roomCode || state.admissionStatus === 'approved') return;
+            sendControlEvent({
+              kind: 'join_request',
+              clientId: state.clientId,
+              joinSessionId: state.joinSessionId,
+              name: state.userName
+            });
+          };
+          sendJoinReq();
+          state.joinRequestInterval = setInterval(sendJoinReq, 4000);
+        }
+      }
+
+      function showRemoteTyping(sender) {
+        typingText.textContent = `${sender || 'Someone'} is typing...`;
+        typingIndicator.classList.remove('hidden');
+        clearTimeout(state.typingTimeout);
+        state.typingTimeout = setTimeout(() => {
+          typingIndicator.classList.add('hidden');
+        }, 1800);
+      }
+
+      function leaveCurrentRoom() {
+        stopCloudStream();
+        saveRoomMessagesNow();
+        if (state.joinRequestInterval) {
+          clearInterval(state.joinRequestInterval);
+          state.joinRequestInterval = null;
+        }
+        if (state.expiryTimer) {
+          clearInterval(state.expiryTimer);
+          state.expiryTimer = null;
+        }
+        state.viewOnceTimers.forEach(t => clearInterval(t));
+        state.viewOnceTimers.clear();
+        if (state.channel) {
+          try { state.channel.close(); } catch (_) {}
+          state.channel = null;
+        }
+        closeDrawer();
+        hostControlsModal.classList.add('hidden');
+        waitingApprovalView.classList.add('hidden');
+        hostJoinPinBanner.classList.add('hidden');
+        pinnedMessageBanner.classList.add('hidden');
+        editBanner.classList.add('hidden');
+        state.roomCode = null;
+        state.isHost = false;
+        state.admissionStatus = 'approved';
+        state.pendingRequests = [];
+        state.members = [];
+        state.pendingFiles = [];
+        state.replyTo = null;
+        state.unreadCount = 0;
+        updateDocumentTitle();
+        roomView.classList.add('hidden');
+        lobbyView.classList.remove('hidden');
+        refreshIcons();
+      }
+
+      leaveRoomBtn.addEventListener('click', leaveCurrentRoom);
+      waitingLeaveBtn.addEventListener('click', leaveCurrentRoom);
+
+      // Host Login Modal Handlers
+      function openHostAuthModal() {
+        const lobbyCode = getEnteredPin();
+        hostRoomCodeInput.value = lobbyCode.length === 6 ? lobbyCode : '';
+        hostNameInput.value = nicknameInput.value.trim() || 'Host';
+        hostRoomNameInput.value = '';
+        const defCol = getDefaultRoomColor(hostRoomCodeInput.value || '123456');
+        hostRoomColorInput.value = defCol;
+        hostAuthColorHex.textContent = defCol;
+        hostPasswordInput.value = '';
+        hostPasswordInput.type = 'password';
+        hostAuthError.classList.add('hidden');
+        hostAuthModal.classList.remove('hidden');
+        refreshIcons();
+        hostPasswordInput.focus();
+      }
+
+      function closeHostAuthModal() {
+        hostAuthModal.classList.add('hidden');
+        hostAuthError.classList.add('hidden');
+      }
+
+      openHostModalBtn.addEventListener('click', openHostAuthModal);
+      hostAuthClose.addEventListener('click', closeHostAuthModal);
+      hostAuthCancel.addEventListener('click', closeHostAuthModal);
+
+      hostRandomCodeBtn.addEventListener('click', () => {
+        hostRoomCodeInput.value = String(Math.floor(100000 + Math.random() * 900000));
+        hostAuthError.classList.add('hidden');
+      });
+
+      hostPasswordToggle.addEventListener('click', () => {
+        const isHidden = hostPasswordInput.type === 'password';
+        hostPasswordInput.type = isHidden ? 'text' : 'password';
+        hostPasswordToggle.innerHTML = isHidden
+          ? '<i data-lucide="eye-off" class="w-4 h-4"></i>'
+          : '<i data-lucide="eye" class="w-4 h-4"></i>';
+        refreshIcons();
+      });
+
+      hostAuthForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const code = hostRoomCodeInput.value.replace(/\D/g, '').trim();
+        const hostName = hostNameInput.value.trim() || 'Host';
+        const pwd = hostPasswordInput.value;
+
+        if (code.length !== 6) {
+          hostAuthError.textContent = 'Please enter a 6-digit room code.';
+          hostAuthError.classList.remove('hidden');
+          hostRoomCodeInput.focus();
+          return;
+        }
+        if (pwd !== HOST_PASSWORD) {
+          hostAuthError.textContent = 'Incorrect host password.';
+          hostAuthError.classList.remove('hidden');
+          hostPasswordInput.focus();
+          return;
+        }
+        const customRoomName = hostRoomNameInput.value.trim();
+        const customRoomColor = hostRoomColorInput.value || getDefaultRoomColor(code);
+        closeHostAuthModal();
+        setPinValue(code);
+        enterRoom(code, true, hostName, customRoomName, customRoomColor);
+        showToast(`Entered Room #${code} as Host`, 'success');
+      });
+
+      hostRoomColorInput.addEventListener('input', () => {
+        hostAuthColorHex.textContent = hostRoomColorInput.value;
+      });
+      hostAuthSwatches.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-color-swatch]');
+        if (!btn) return;
+        const c = btn.getAttribute('data-color-swatch');
+        hostRoomColorInput.value = c;
+        hostAuthColorHex.textContent = c;
+      });
+
+      ctrlColorSwatches.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-ctrl-swatch]');
+        if (!btn) return;
+        ctrlRoomColorInput.value = btn.getAttribute('data-ctrl-swatch');
+      });
+
+      ctrlSaveRoomBtn.addEventListener('click', () => {
+        if (!state.isHost) return;
+        const newName = ctrlRoomNameInput.value.trim();
+        const newColor = ctrlRoomColorInput.value || state.roomColor;
+        applyRoomTheme(newName, newColor);
+        sendControlEvent({
+          kind: 'room_settings',
+          roomName: state.roomName,
+          roomColor: state.roomColor
+        });
+        showToast('Updated room name & colour', 'success');
+      });
+
+      // Host Controls Modal Handlers
+      hostControlsBtn.addEventListener('click', () => {
+        if (!state.isHost) return;
+        renderHostControls();
+        hostControlsModal.classList.remove('hidden');
+        refreshIcons();
+      });
+
+      hostControlsClose.addEventListener('click', () => {
+        hostControlsModal.classList.add('hidden');
+      });
+
+      hostControlsModal.addEventListener('click', (e) => {
+        if (e.target === hostControlsModal) {
+          hostControlsModal.classList.add('hidden');
+          return;
+        }
+        const acceptBtn = e.target.closest('[data-accept-client]');
+        if (acceptBtn) {
+          acceptPendingMember(acceptBtn.getAttribute('data-accept-client'));
+          return;
+        }
+
+        const declineBtn = e.target.closest('[data-decline-client]');
+        if (declineBtn) {
+          declinePendingMember(declineBtn.getAttribute('data-decline-client'));
+          return;
+        }
+
+        const removeBtn = e.target.closest('[data-remove-client]');
+        if (removeBtn) {
+          const cid = removeBtn.getAttribute('data-remove-client');
+          const mem = state.members.find(m => m.clientId === cid);
+          if (!mem || mem.role === 'host') return;
+          state.members = state.members.filter(m => m.clientId !== cid);
+          state.removedClients.add(cid);
+          state.removedAt.set(cid, Date.now());
+          sendControlEvent({
+            kind: 'member_removed',
+            targetClientId: cid,
+            targetName: mem.name
+          });
+          const sysMsg = {
+            id: 'sys-rem-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
+            type: 'system',
+            text: `${mem.name} was removed by the host.`,
+            timestamp: Date.now()
+          };
+          pushAndRenderMessage(sysMsg, false);
+          broadcastLocalEvent({ type: 'new_message', message: sysMsg });
+          refreshDmTargetOptions();
+          renderHostControls();
+          showToast(`Removed ${mem.name}`, 'info');
+          return;
+        }
+
+        const dmBtn = e.target.closest('[data-dm-client]');
+        if (dmBtn) {
+          const cid = dmBtn.getAttribute('data-dm-client');
+          refreshDmTargetOptions();
+          dmTargetSelect.value = cid;
+          hostControlsModal.classList.add('hidden');
+          messageInput.focus();
+          const mem = state.members.find(m => m.clientId === cid);
+          if (mem) showToast(`Private message to ${mem.name}`, 'info');
+        }
+      });
+
+      copyCodeBtn.addEventListener('click', () => {
+        if (!state.roomCode) return;
+        const code = state.roomCode;
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(code).then(() => {
+            showToast(`Copied code ${code}`, 'success');
+          }).catch(() => fallbackCopy(code));
+        } else {
+          fallbackCopy(code);
+        }
+      });
+
+      function fallbackCopy(text) {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        try {
+          document.execCommand('copy');
+          showToast(`Copied code ${text}`, 'success');
+        } catch (_) {
+          showToast(`Room code: ${text}`, 'info');
+        }
+        ta.remove();
+      }
+
+      switchSenderBtn.addEventListener('click', () => {
+        state.senderMode = state.senderMode === 'me' ? 'peer' : 'me';
+        senderModeLabel.textContent = state.senderMode === 'me' ? 'As: Me' : 'As: Peer';
+        showToast(
+          state.senderMode === 'me'
+            ? `Sending as ${state.userName}`
+            : 'Sending as Peer (local test)',
+          'info'
+        );
+      });
+
+      // Shared Files Drawer
+      function openDrawer() {
+        state.drawerOpen = true;
+        filesDrawerBackdrop.classList.remove('hidden');
+        filesDrawer.classList.remove('hidden');
+        renderDrawer();
+      }
+
+      function closeDrawer() {
+        state.drawerOpen = false;
+        filesDrawerBackdrop.classList.add('hidden');
+        filesDrawer.classList.add('hidden');
+      }
+
+      openDrawerBtn.addEventListener('click', openDrawer);
+      closeDrawerBtn.addEventListener('click', closeDrawer);
+      filesDrawerBackdrop.addEventListener('click', closeDrawer);
+
+      drawerTabBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+          state.drawerTab = btn.getAttribute('data-drawer-tab');
+          drawerTabBtns.forEach(b => {
+            const active = b === btn;
+            b.className = `drawer-tab-btn px-2.5 py-1 rounded-lg text-xs font-medium transition ${active ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-300 hover:text-white'}`;
+          });
+          renderDrawer();
+        });
+      });
+
+      function renderDrawer() {
+        const allFiles = [];
+        state.messages.forEach(m => {
+          (m.files || []).forEach(f => {
+            const src = f.dataUrl || f.remoteUrl;
+            if (!src) return;
+            const isMedia = f.mime && (f.mime.startsWith('image/') || f.mime.startsWith('video/') || f.mime.startsWith('audio/'));
+            allFiles.push({
+              name: f.name,
+              size: f.size,
+              mime: f.mime || '',
+              src,
+              isMedia,
+              sender: m.sender,
+              timestamp: m.timestamp
+            });
+          });
+        });
+
+        drawerFileCount.textContent = String(allFiles.length);
+        const filtered = allFiles.filter(f => {
+          if (state.drawerTab === 'media') return f.isMedia;
+          if (state.drawerTab === 'docs') return !f.isMedia;
+          return true;
+        }).reverse();
+
+        if (!filtered.length) {
+          drawerFilesList.innerHTML = `
+            <div class="text-center py-10 text-slate-500">
+              <p class="text-xs">No shared files in this tab yet.</p>
+            </div>
+          `;
+          return;
+        }
+
+        drawerFilesList.innerHTML = filtered.map(f => {
+          const isImg = f.mime.startsWith('image/');
+          return `
+            <div class="flex items-center justify-between gap-2.5 p-2.5 rounded-xl bg-slate-950 border border-slate-800">
+              <div class="flex items-center gap-2.5 min-w-0">
+                ${isImg
+                  ? `<img src="${f.src}" alt="${escapeHtml(f.name)}" data-drawer-img="${f.src}" data-drawer-name="${escapeHtml(f.name)}" class="w-10 h-10 rounded-lg object-cover shrink-0 cursor-pointer" />`
+                  : `<div class="w-10 h-10 rounded-lg bg-indigo-500/15 text-indigo-300 flex items-center justify-center shrink-0">${SVG_FILE}</div>`
+                }
+                <div class="min-w-0">
+                  <p class="text-xs font-medium text-slate-200 truncate">${escapeHtml(f.name)}</p>
+                  <p class="text-[10px] text-slate-400 truncate">${escapeHtml(f.sender)} • ${formatBytes(f.size)}</p>
+                </div>
+              </div>
+              <a href="${f.src}" download="${escapeHtml(f.name)}" target="_blank" rel="noopener noreferrer" class="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 shrink-0 transition" title="Download">
+                ${SVG_DOWNLOAD}
+              </a>
+            </div>
+          `;
+        }).join('');
+      }
+
+      drawerFilesList.addEventListener('click', (e) => {
+        const img = e.target.closest('[data-drawer-img]');
+        if (!img) return;
+        lightboxImg.src = img.getAttribute('data-drawer-img');
+        const name = img.getAttribute('data-drawer-name');
+        lightboxTitle.textContent = name;
+        lightboxDownload.href = lightboxImg.src;
+        lightboxDownload.setAttribute('download', name);
+        lightboxModal.classList.remove('hidden');
+        refreshIcons();
+      });
+
+      // Search
+      toggleSearchBtn.addEventListener('click', () => {
+        searchBar.classList.toggle('hidden');
+        if (!searchBar.classList.contains('hidden')) {
+          searchInput.focus();
+        } else {
+          state.searchQuery = '';
+          searchInput.value = '';
+          renderMessages(false);
+        }
+      });
+
+      searchInput.addEventListener('input', (e) => {
+        state.searchQuery = e.target.value.trim().toLowerCase();
+        renderMessages(false);
+      });
+
+      searchClearBtn.addEventListener('click', () => {
+        state.searchQuery = '';
+        searchInput.value = '';
+        renderMessages(false);
+      });
+
+      // Clear Chat Modal
+      clearChatBtn.addEventListener('click', () => {
+        confirmModal.classList.remove('hidden');
+      });
+      confirmCancel.addEventListener('click', () => {
+        confirmModal.classList.add('hidden');
+      });
+      confirmProceed.addEventListener('click', () => {
+        confirmModal.classList.add('hidden');
+        try {
+          localStorage.removeItem(STORAGE_PREFIX + state.roomCode);
+        } catch (_) {}
+        state.messages = loadRoomMessages(state.roomCode);
+        rebuildMsgIndex();
+        saveRoomMessagesNow();
+        broadcastLocalEvent({ type: 'clear' });
+        renderMessages(true);
+        if (state.drawerOpen) renderDrawer();
+        showToast('Local room view cleared', 'info');
+      });
+
+      // Pinned Join Banner Actions (Host)
+      hostPinAcceptBtn.addEventListener('click', () => {
+        if (!state.isHost || !state.pendingRequests.length) return;
+        const latest = state.pendingRequests[state.pendingRequests.length - 1];
+        acceptPendingMember(latest.clientId);
+      });
+      hostPinDeclineBtn.addEventListener('click', () => {
+        if (!state.isHost || !state.pendingRequests.length) return;
+        const latest = state.pendingRequests[state.pendingRequests.length - 1];
+        declinePendingMember(latest.clientId);
+      });
+      hostPinViewBtn.addEventListener('click', () => {
+        if (!state.isHost) return;
+        renderHostControls();
+        hostControlsModal.classList.remove('hidden');
+        refreshIcons();
+      });
+
+      // Pinned Chat Message Banner Actions
+      pinnedJumpBtn.addEventListener('click', () => {
+        if (!state.pinnedMsgId) return;
+        const el = messagesList.querySelector(`[data-msg-id="${state.pinnedMsgId}"]`);
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          el.classList.add('ring-2', 'ring-indigo-400', 'rounded-2xl');
+          setTimeout(() => el.classList.remove('ring-2', 'ring-indigo-400', 'rounded-2xl'), 1500);
+        }
+      });
+      unpinMessageBtn.addEventListener('click', () => {
+        state.pinnedMsgId = null;
+        updatePinnedBanner();
+        sendControlEvent({ kind: 'pin_message', msgId: null });
+      });
+
+      // Starred Filter Toggle
+      starredFilterBtn.addEventListener('click', () => {
+        state.starredOnly = !state.starredOnly;
+        starredFilterBtn.className = state.starredOnly
+          ? 'p-2 rounded-xl bg-amber-500/20 border border-amber-500/40 text-amber-300 transition'
+          : 'p-2 rounded-xl bg-slate-800/80 hover:bg-slate-800 text-slate-300 transition';
+        renderMessages(false);
+        showToast(state.starredOnly ? 'Showing starred messages' : 'Showing all messages', 'info');
+      });
+
+      // Edit Banner Cancel
+      cancelEditBtn.addEventListener('click', () => {
+        state.editingMsgId = null;
+        editBanner.classList.add('hidden');
+        messageInput.value = '';
+        messageInput.style.height = 'auto';
+      });
+
+      // View-Once (One-Time) Toggle
+      viewOnceBtn.addEventListener('click', () => {
+        state.viewOnceMode = !state.viewOnceMode;
+        viewOnceBtn.setAttribute('aria-pressed', state.viewOnceMode ? 'true' : 'false');
+        viewOnceBtn.className = state.viewOnceMode
+          ? 'inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-emerald-600/25 border border-emerald-500/50 text-[11px] font-semibold text-emerald-300 transition'
+          : 'inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-800/70 hover:bg-slate-800 text-[11px] font-medium text-slate-300 transition';
+        showToast(state.viewOnceMode ? '1x View-Once enabled for next message' : '1x View-Once turned off', 'info');
+      });
+
+      // Reply Banner
+      cancelReplyBtn.addEventListener('click', () => {
+        state.replyTo = null;
+        replyBanner.classList.add('hidden');
+      });
+
+      // Quick Polls
+      function closePollModal() {
+        pollModal.classList.add('hidden');
+        pollError.classList.add('hidden');
+      }
+
+      openPollBtn.addEventListener('click', () => {
+        pollQuestionInput.value = '';
+        pollOptionInputs.forEach(inp => { inp.value = ''; });
+        pollError.classList.add('hidden');
+        pollModal.classList.remove('hidden');
+        pollQuestionInput.focus();
+        refreshIcons();
+      });
+      pollCloseBtn.addEventListener('click', closePollModal);
+      pollCancelBtn.addEventListener('click', closePollModal);
+
+      pollForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const question = pollQuestionInput.value.trim();
+        const options = pollOptionInputs.map(i => i.value.trim()).filter(Boolean);
+        if (!question || options.length < 2) {
+          pollError.classList.remove('hidden');
+          return;
+        }
+        closePollModal();
+
+        const isMe = state.senderMode === 'me';
+        const sender = isMe ? state.userName : 'Peer';
+        const ttlMs = Number(ttlSelect.value) || 0;
+        const expiresAt = ttlMs > 0 ? Date.now() + ttlMs : null;
+        const msgId = 'm-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7);
+
+        const msg = {
+          id: msgId,
+          type: 'poll',
+          sender,
+          isSelf: isMe,
+          text: '',
+          poll: {
+            question,
+            options,
+            votes: {}
+          },
+          expiresAt,
+          files: [],
+          reactions: {},
+          timestamp: Date.now()
+        };
+
+        pushAndRenderMessage(msg, true);
+        broadcastLocalEvent({ type: 'new_message', message: msg });
+        if (isMe) publishCloudMessage(msg);
+      });
+
+      // Voice Notes (MediaRecorder)
+      function stopRecordingCleanup() {
+        if (state.recordTimer) {
+          clearInterval(state.recordTimer);
+          state.recordTimer = null;
+        }
+        recordingBar.classList.add('hidden');
+        state.recordSeconds = 0;
+        recordingTimer.textContent = '0:00';
+      }
+
+      micBtn.addEventListener('click', async () => {
+        if (state.mediaRecorder && state.mediaRecorder.state === 'recording') {
+          state.recordCancelFlag = false;
+          state.mediaRecorder.stop();
+          return;
+        }
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || typeof MediaRecorder === 'undefined') {
+          showToast('Voice recording is not supported in this browser', 'error');
+          return;
+        }
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          const mimeType = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : '';
+          const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+          state.mediaRecorder = recorder;
+          state.recordChunks = [];
+          state.recordCancelFlag = false;
+          state.recordSeconds = 0;
+          recordingTimer.textContent = '0:00';
+          recordingBar.classList.remove('hidden');
+
+          state.recordTimer = setInterval(() => {
+            state.recordSeconds++;
+            const mins = Math.floor(state.recordSeconds / 60);
+            const secs = String(state.recordSeconds % 60).padStart(2, '0');
+            recordingTimer.textContent = `${mins}:${secs}`;
+          }, 1000);
+
+          recorder.ondataavailable = (ev) => {
+            if (ev.data && ev.data.size > 0) state.recordChunks.push(ev.data);
+          };
+
+          recorder.onstop = () => {
+            stream.getTracks().forEach(t => t.stop());
+            const canceled = state.recordCancelFlag;
+            stopRecordingCleanup();
+            if (canceled || !state.recordChunks.length) return;
+            const blob = new Blob(state.recordChunks, { type: recorder.mimeType || 'audio/webm' });
+            const ext = (recorder.mimeType || '').includes('ogg') ? 'ogg' : 'webm';
+            const file = new File([blob], `voice-note-${Date.now()}.${ext}`, { type: blob.type });
+            addFilesToQueue([file]);
+            showToast('Voice note ready — click Send', 'success');
+          };
+
+          recorder.start();
+        } catch (_) {
+          stopRecordingCleanup();
+          showToast('Microphone permission denied or unavailable', 'error');
+        }
+      });
+
+      cancelRecordBtn.addEventListener('click', () => {
+        state.recordCancelFlag = true;
+        if (state.mediaRecorder && state.mediaRecorder.state === 'recording') {
+          state.mediaRecorder.stop();
+        } else {
+          stopRecordingCleanup();
+        }
+      });
+
+      sendRecordBtn.addEventListener('click', () => {
+        state.recordCancelFlag = false;
+        if (state.mediaRecorder && state.mediaRecorder.state === 'recording') {
+          state.mediaRecorder.stop();
+        }
+      });
+
+      // File Handling
+      attachBtn.addEventListener('click', () => fileInput.click());
+
+      fileInput.addEventListener('change', (e) => {
+        if (e.target.files && e.target.files.length) {
+          addFilesToQueue(Array.from(e.target.files));
+          fileInput.value = '';
+        }
+      });
+
+      function addFilesToQueue(files) {
+        files.forEach(file => {
+          const blobUrl = URL.createObjectURL(file);
+          state.pendingFiles.push({
+            id: 'f-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7),
+            name: file.name,
+            size: file.size,
+            mime: file.type || 'application/octet-stream',
+            dataUrl: blobUrl,
+            fileObj: file
+          });
+        });
+        renderPendingFiles();
+      }
+
+      // Drag and Drop
+      let dragCounter = 0;
+      dropZone.addEventListener('dragenter', (e) => {
+        e.preventDefault();
+        dragCounter++;
+        dragOverlay.classList.remove('hidden');
+      });
+      dropZone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+      });
+      dropZone.addEventListener('dragleave', (e) => {
+        e.preventDefault();
+        dragCounter--;
+        if (dragCounter <= 0) {
+          dragCounter = 0;
+          dragOverlay.classList.add('hidden');
+        }
+      });
+      dropZone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        dragCounter = 0;
+        dragOverlay.classList.add('hidden');
+        if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length) {
+          addFilesToQueue(Array.from(e.dataTransfer.files));
+        }
+      });
+
+      // Paste image support
+      messageInput.addEventListener('paste', (e) => {
+        const items = e.clipboardData && e.clipboardData.items;
+        if (!items) return;
+        const files = [];
+        for (const item of items) {
+          if (item.kind === 'file') {
+            const f = item.getAsFile();
+            if (f) files.push(f);
+          }
+        }
+        if (files.length) {
+          addFilesToQueue(files);
+        }
+      });
+
+      function renderPendingFiles() {
+        if (!state.pendingFiles.length) {
+          pendingFilesBar.classList.add('hidden');
+          pendingFilesBar.innerHTML = '';
+          return;
+        }
+        pendingFilesBar.classList.remove('hidden');
+        pendingFilesBar.innerHTML = state.pendingFiles.map(f => {
+          const isImg = f.mime.startsWith('image/');
+          return `
+            <div class="shrink-0 flex items-center gap-2 bg-slate-800 border border-slate-700 rounded-xl px-2.5 py-1.5 max-w-[200px]">
+              ${isImg
+                ? `<img src="${f.dataUrl}" alt="${escapeHtml(f.name)}" class="w-7 h-7 rounded-md object-cover shrink-0" />`
+                : `<div class="w-7 h-7 rounded-md bg-indigo-500/20 text-indigo-300 flex items-center justify-center shrink-0">${SVG_FILE}</div>`
+              }
+              <div class="min-w-0">
+                <p class="text-xs font-medium text-slate-200 truncate">${escapeHtml(f.name)}</p>
+                <p class="text-[10px] text-slate-400">${formatBytes(f.size)}</p>
+              </div>
+              <button type="button" data-remove-file="${f.id}" class="p-1 rounded-md hover:bg-slate-700 text-slate-400 hover:text-white transition" aria-label="Remove file">✕</button>
+            </div>
+          `;
+        }).join('');
+      }
+
+      pendingFilesBar.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-remove-file]');
+        if (!btn) return;
+        const id = btn.getAttribute('data-remove-file');
+        state.pendingFiles = state.pendingFiles.filter(f => f.id !== id);
+        renderPendingFiles();
+      });
+
+      // Emoji Picker
+      emojiGrid.innerHTML = QUICK_EMOJIS.map(em =>
+        `<button type="button" data-emoji="${em}" class="p-1.5 rounded-lg hover:bg-slate-800 transition text-center">${em}</button>`
+      ).join('');
+
+      emojiBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        emojiPopover.classList.toggle('hidden');
+      });
+
+      emojiGrid.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-emoji]');
+        if (!btn) return;
+        const em = btn.getAttribute('data-emoji');
+        const start = messageInput.selectionStart || messageInput.value.length;
+        const end = messageInput.selectionEnd || messageInput.value.length;
+        messageInput.value = messageInput.value.slice(0, start) + em + messageInput.value.slice(end);
+        messageInput.focus();
+        messageInput.selectionStart = messageInput.selectionEnd = start + em.length;
+        emojiPopover.classList.add('hidden');
+      });
+
+      document.addEventListener('click', (e) => {
+        if (!emojiPopover.contains(e.target) && e.target !== emojiBtn) {
+          emojiPopover.classList.add('hidden');
+        }
+      });
+
+      // Auto-resize textarea & Enter to send
+      messageInput.addEventListener('input', () => {
+        messageInput.style.height = 'auto';
+        messageInput.style.height = Math.min(messageInput.scrollHeight, 128) + 'px';
+        broadcastLocalEvent({
+          type: 'typing',
+          sender: state.senderMode === 'me' ? state.userName : 'Peer'
+        });
+      });
+
+      messageInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault();
+          messageForm.dispatchEvent(new Event('submit', { cancelable: true }));
+        }
+      });
+
+      messageForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const text = messageInput.value.trim();
+        if (state.editingMsgId) {
+          if (!text) return;
+          const editId = state.editingMsgId;
+          const msg = state.messages.find(m => m.id === editId);
+          if (msg) {
+            msg.text = text;
+            msg.edited = true;
+            scheduleSaveRoomMessages();
+            updateMessageNodeInPlace(editId);
+            if (state.pinnedMsgId === editId) updatePinnedBanner();
+            sendControlEvent({ kind: 'edit_message', msgId: editId, text });
+            showToast('Message updated', 'success');
+          }
+          state.editingMsgId = null;
+          editBanner.classList.add('hidden');
+          messageInput.value = '';
+          messageInput.style.height = 'auto';
+          return;
+        }
+        const files = [...state.pendingFiles];
+        if (!text && !files.length) return;
+
+        const isMe = state.senderMode === 'me';
+        const sender = isMe ? state.userName : 'Peer';
+        const ttlMs = Number(ttlSelect.value) || 0;
+        const expiresAt = ttlMs > 0 ? Date.now() + ttlMs : null;
+        const msgId = 'm-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7);
+
+        const targetCid = state.isHost && dmTargetSelect ? dmTargetSelect.value : '';
+        const targetMem = targetCid ? state.members.find(m => m.clientId === targetCid) : null;
+        const isPrivate = Boolean(targetCid && targetMem);
+
+        const isViewOnce = state.viewOnceMode;
+        const msg = {
+          id: msgId,
+          type: 'chat',
+          sender,
+          isSelf: isMe,
+          viewOnce: isViewOnce,
+          viewOnceState: isViewOnce ? (isMe ? 'sent' : 'locked') : null,
+          isPrivate,
+          targetClientId: isPrivate ? targetCid : null,
+          targetName: isPrivate ? targetMem.name : '',
+          text,
+          replyTo: state.replyTo ? { ...state.replyTo } : null,
+          expiresAt,
+          files: files.map(f => ({
+            name: f.name,
+            size: f.size,
+            mime: f.mime,
+            dataUrl: f.dataUrl,
+            remoteUrl: null,
+            uploadStatus: isMe ? 'uploading' : 'done',
+            progress: isMe ? 5 : 100
+          })),
+          reactions: {},
+          timestamp: Date.now()
+        };
+
+        state.pendingFiles = [];
+        state.replyTo = null;
+        state.viewOnceMode = false;
+        viewOnceBtn.setAttribute('aria-pressed', 'false');
+        viewOnceBtn.className = 'inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-800/70 hover:bg-slate-800 text-[11px] font-medium text-slate-300 transition';
+        replyBanner.classList.add('hidden');
+        messageInput.value = '';
+        messageInput.style.height = 'auto';
+        renderPendingFiles();
+
+        pushAndRenderMessage(msg, true);
+        broadcastLocalEvent({ type: 'new_message', message: msg });
+        if (state.drawerOpen) renderDrawer();
+
+        if (isMe) {
+          if (files.length === 0) {
+            publishCloudMessage(msg);
+          } else {
+            files.forEach((f, idx) => {
+              publishCloudFile(f.fileObj, msgId, idx, sender, idx === 0 ? text : '', expiresAt);
+            });
+          }
+        }
+      });
+
+      function buildMessageHtml(m, now) {
+        if (m.type === 'system') {
+          return `
+            <div data-msg-id="${m.id}" class="flex justify-center my-2">
+              <span class="px-3 py-1 rounded-full bg-slate-900 border border-slate-800 text-[11px] text-slate-400 text-center max-w-md">${escapeHtml(m.text)}</span>
+            </div>
+          `;
+        }
+
+        const alignClass = m.isSelf ? 'items-end' : 'items-start';
+        const bubbleClass = m.isPrivate
+          ? (m.isSelf
+              ? 'bg-amber-700/90 border border-amber-400/40 text-white rounded-2xl rounded-br-sm'
+              : 'bg-amber-950/80 border border-amber-500/40 text-amber-100 rounded-2xl rounded-bl-sm')
+          : (m.isSelf
+              ? 'room-accent-bg text-white rounded-2xl rounded-br-sm'
+              : 'bg-slate-800/95 border border-slate-700/70 text-slate-100 rounded-2xl rounded-bl-sm');
+
+        const privateBadge = m.isPrivate
+          ? `<span class="px-1.5 py-0.5 rounded bg-amber-500/20 border border-amber-400/30 text-amber-300 text-[10px] font-semibold">${m.isSelf ? `Private to ${escapeHtml(m.targetName || 'Member')}` : 'Private from Host'}</span>`
+          : '';
+
+        const replyQuoteHtml = m.replyTo
+          ? `<div class="mb-2 px-2.5 py-1.5 rounded-xl bg-black/25 border-l-2 border-indigo-300 text-xs">
+              <p class="font-semibold text-[11px] opacity-90">${escapeHtml(m.replyTo.sender)}</p>
+              <p class="opacity-75 truncate max-w-xs">${escapeHtml(m.replyTo.text)}</p>
+            </div>`
+          : '';
+
+        let pollHtml = '';
+        if (m.type === 'poll' && m.poll) {
+          const votes = m.poll.votes || {};
+          const totalVotes = Object.keys(votes).length;
+          const myVote = votes[state.clientId];
+          pollHtml = `
+            <div class="space-y-2 min-w-[220px] sm:min-w-[260px]">
+              <p class="text-sm font-semibold">${escapeHtml(m.poll.question)}</p>
+              <div class="space-y-1.5">
+                ${m.poll.options.map((opt, idx) => {
+                  const count = Object.values(votes).filter(v => v === idx).length;
+                  const pct = totalVotes > 0 ? Math.round((count / totalVotes) * 100) : 0;
+                  const picked = myVote === idx;
+                  return `
+                    <button type="button" data-vote-msg="${m.id}" data-vote-opt="${idx}" class="relative w-full text-left overflow-hidden rounded-xl border ${picked ? 'border-indigo-300 bg-black/30' : 'border-white/15 bg-black/20 hover:bg-black/30'} px-3 py-2 text-xs transition">
+                      <div class="absolute inset-y-0 left-0 bg-white/15 transition-all duration-300" style="width: ${pct}%"></div>
+                      <div class="relative flex items-center justify-between gap-2">
+                        <span class="font-medium">${escapeHtml(opt)}${picked ? ' ✓' : ''}</span>
+                        <span class="opacity-80 font-mono-code text-[11px]">${count} (${pct}%)</span>
+                      </div>
+                    </button>
+                  `;
+                }).join('')}
+              </div>
+              <p class="text-[10px] opacity-75">${totalVotes} ${totalVotes === 1 ? 'vote' : 'votes'}</p>
+            </div>
+          `;
+        }
+
+        const filesHtml = (m.files || []).map((f, fIdx) => {
+          const fileSrc = f.dataUrl || f.remoteUrl;
+          const isImg = f.mime && f.mime.startsWith('image/') && fileSrc;
+          const isAudio = f.mime && f.mime.startsWith('audio/') && fileSrc;
+          const isVideo = f.mime && f.mime.startsWith('video/') && fileSrc;
+          const progressKey = `${m.id}-${fIdx}`;
+          const progressBarHtml = f.uploadStatus === 'uploading' || f.uploadStatus === 'error'
+            ? `<div class="mt-1.5">
+                <div class="flex items-center justify-between text-[10px] opacity-85 mb-1">
+                  <span data-progress-label="${progressKey}">${f.uploadStatus === 'error' ? escapeHtml(f.uploadNote || 'Upload failed') : `Uploading ${f.progress || 0}%`}</span>
+                </div>
+                <div class="w-full h-1.5 rounded-full bg-black/30 overflow-hidden">
+                  <div data-progress-bar="${progressKey}" class="h-full ${f.uploadStatus === 'error' ? 'bg-rose-400' : 'bg-indigo-400'} transition-all duration-150" style="width: ${f.progress || 5}%"></div>
+                </div>
+              </div>`
+            : '';
+
+          if (isImg) {
+            return `
+              <div class="mt-1.5 overflow-hidden rounded-xl border border-black/20 bg-black/20">
+                <img src="${fileSrc}" alt="${escapeHtml(f.name)}" data-lightbox-src="${fileSrc}" data-lightbox-name="${escapeHtml(f.name)}" class="max-h-60 w-auto max-w-full object-cover cursor-pointer hover:opacity-95 transition" />
+                <div class="flex items-center justify-between gap-2 px-2.5 py-1.5 text-[11px] bg-black/30">
+                  <span class="truncate">${escapeHtml(f.name)}</span>
+                  <a href="${fileSrc}" download="${escapeHtml(f.name)}" target="_blank" rel="noopener noreferrer" class="shrink-0 underline hover:text-indigo-200">Save</a>
+                </div>
+                ${progressBarHtml ? `<div class="px-2.5 pb-2 bg-black/30">${progressBarHtml}</div>` : ''}
+              </div>
+            `;
+          }
+
+          if (isAudio) {
+            return `
+              <div class="mt-1.5 p-2 rounded-xl bg-black/25 border border-white/10">
+                <div class="text-xs font-medium truncate mb-1">${escapeHtml(f.name)}</div>
+                <audio controls src="${fileSrc}" class="w-full max-w-xs h-8"></audio>
+                ${progressBarHtml}
+              </div>
+            `;
+          }
+
+          if (isVideo) {
+            return `
+              <div class="mt-1.5 overflow-hidden rounded-xl bg-black/30 border border-white/10">
+                <video controls src="${fileSrc}" class="max-h-56 max-w-full"></video>
+                <div class="flex items-center justify-between px-2.5 py-1 text-[11px]">
+                  <span class="truncate">${escapeHtml(f.name)}</span>
+                  <a href="${fileSrc}" download="${escapeHtml(f.name)}" target="_blank" rel="noopener noreferrer" class="underline">Save</a>
+                </div>
+                ${progressBarHtml ? `<div class="px-2.5 pb-2">${progressBarHtml}</div>` : ''}
+              </div>
+            `;
+          }
+
+          return `
+            <div class="mt-1.5 p-2.5 rounded-xl ${m.isSelf ? 'bg-indigo-700/60 border border-indigo-400/30' : 'bg-slate-900/90 border border-slate-700'}">
+              <div class="flex items-center justify-between gap-3">
+                <div class="flex items-center gap-2.5 min-w-0">
+                  <div class="w-8 h-8 rounded-lg ${m.isSelf ? 'bg-white/15 text-white' : 'bg-indigo-500/20 text-indigo-300'} flex items-center justify-center shrink-0">
+                    ${SVG_FILE}
+                  </div>
+                  <div class="min-w-0">
+                    <p class="text-xs font-medium truncate max-w-[160px] sm:max-w-[220px]">${escapeHtml(f.name)}</p>
+                    <p class="text-[10px] opacity-75">${formatBytes(f.size)}</p>
+                  </div>
+                </div>
+                ${fileSrc
+                  ? `<a href="${fileSrc}" download="${escapeHtml(f.name)}" target="_blank" rel="noopener noreferrer" class="shrink-0 p-1.5 rounded-lg bg-white/10 hover:bg-white/20 transition" title="Download file" aria-label="Download ${escapeHtml(f.name)}">${SVG_DOWNLOAD}</a>`
+                  : `<span class="text-[10px] opacity-70 shrink-0">Session only</span>`
+                }
+              </div>
+              ${progressBarHtml}
+            </div>
+          `;
+        }).join('');
+
+        const reactions = m.reactions || {};
+        const reactionChips = REACTION_EMOJIS.map(em => {
+          const count = reactions[em] || 0;
+          const activeClass = count > 0 ? 'bg-indigo-500/20 border-indigo-500/40 text-indigo-200' : 'bg-slate-900/70 border-slate-800 text-slate-400 opacity-0 group-hover:opacity-100';
+          return `<button type="button" data-react-msg="${m.id}" data-react-emoji="${em}" class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full border text-[11px] transition ${activeClass}">${em}${count > 0 ? `<span>${count}</span>` : ''}</button>`;
+        }).join('');
+
+        const expiryBadge = m.expiresAt
+          ? `<span class="inline-flex items-center gap-0.5 text-[10px] text-amber-400" title="Auto-expires">${SVG_TIMER}<span data-expires-at="${m.expiresAt}">${formatRemaining(m.expiresAt - now)}</span></span>`
+          : '';
+
+        return `
+          <div data-msg-id="${m.id}" class="group flex flex-col ${alignClass} msg-enter">
+            <div class="flex items-baseline gap-2 mb-1 px-1">
+              <span class="text-[11px] font-semibold ${m.isSelf ? 'room-accent-text' : 'text-slate-300'}">${escapeHtml(m.sender)}</span>
+              ${privateBadge}
+              <span class="text-[10px] text-slate-500">${formatTime(m.timestamp)}</span>
+              ${expiryBadge}
+            </div>
+            <div class="max-w-[85%] sm:max-w-[70%] px-3.5 py-2.5 shadow-sm ${bubbleClass}">
+              ${replyQuoteHtml}
+              ${pollHtml}
+              ${m.viewOnce
+                ? (m.viewOnceState === 'opened'
+                    ? `<div class="space-y-1.5">
+                        <div class="flex items-center justify-between gap-2 text-[10px] font-semibold text-emerald-300 uppercase tracking-wider">
+                          <span>1x View-Once (<span data-vo-countdown="${m.id}">${Math.max(1, Math.ceil(((m.viewOnceBurnAt || Date.now() + 5000) - now) / 1000))}</span>s)</span>
+                          <button type="button" data-burn-once="${m.id}" class="px-2 py-0.5 rounded bg-black/30 hover:bg-black/50 text-white">Hide</button>
+                        </div>
+                        ${m.text ? `<p class="text-sm whitespace-pre-wrap break-words leading-relaxed">${linkify(m.text)}</p>` : ''}
+                        ${filesHtml}
+                      </div>`
+                    : (m.viewOnceState === 'burned'
+                        ? `<p class="text-xs italic opacity-70 flex items-center gap-1.5">🔒 View-once message opened &amp; cleared</p>`
+                        : (m.isSelf
+                            ? `<p class="text-xs italic opacity-85 flex items-center gap-1.5">1️⃣ Sent View-Once message</p>`
+                            : `<button type="button" data-reveal-once="${m.id}" class="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-black/25 hover:bg-black/40 border border-white/15 text-xs font-semibold transition">1️⃣ Tap to view once</button>`)))
+                : `${m.text ? `<p class="text-sm whitespace-pre-wrap break-words leading-relaxed">${linkify(m.text)}${m.edited ? ' <span class="text-[10px] opacity-65">(edited)</span>' : ''}</p>` : ''}
+                   ${filesHtml}`
+              }
+            </div>
+            <div class="flex flex-wrap items-center gap-1 mt-1 px-1">
+              <button type="button" data-reply-msg="${m.id}" class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full border border-slate-800 bg-slate-900/70 text-slate-400 hover:text-white text-[11px] opacity-0 group-hover:opacity-100 transition" title="Reply">↩</button>
+              ${m.text && !m.viewOnce ? `<button type="button" data-copy-msg="${m.id}" class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full border border-slate-800 bg-slate-900/70 text-slate-400 hover:text-white text-[11px] opacity-0 group-hover:opacity-100 transition" title="Copy text">Copy</button>` : ''}
+              ${m.isSelf && m.text && !m.viewOnce ? `<button type="button" data-edit-msg="${m.id}" class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full border border-slate-800 bg-slate-900/70 text-slate-400 hover:text-white text-[11px] opacity-0 group-hover:opacity-100 transition" title="Edit message">Edit</button>` : ''}
+              <button type="button" data-star-msg="${m.id}" class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full border ${m.starred ? 'border-amber-500/40 bg-amber-500/20 text-amber-300' : 'border-slate-800 bg-slate-900/70 text-slate-400 opacity-0 group-hover:opacity-100'} hover:text-amber-300 text-[11px] transition" title="Star message">★</button>
+              <button type="button" data-pin-msg="${m.id}" class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full border ${state.pinnedMsgId === m.id ? 'border-indigo-500/40 bg-indigo-500/20 text-indigo-300' : 'border-slate-800 bg-slate-900/70 text-slate-400 opacity-0 group-hover:opacity-100'} hover:text-indigo-300 text-[11px] transition" title="Pin message">Pin</button>
+              ${reactionChips}
+              ${state.isHost ? `<button type="button" data-delete-msg="${m.id}" class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full border border-rose-500/30 bg-rose-950/50 text-rose-300 hover:bg-rose-600 hover:text-white text-[11px] opacity-0 group-hover:opacity-100 transition" title="Delete for everyone">Delete</button>` : ''}
+            </div>
+          </div>
+        `;
+      }
+
+      // Fast O(1) incremental append for live 100-user rooms
+      function appendMessageNode(m, forceScroll) {
+        const emptyState = messagesList.querySelector('[data-empty-state]');
+        if (emptyState) emptyState.remove();
+
+        const nearBottom = (messagesList.scrollHeight - messagesList.scrollTop - messagesList.clientHeight) < 140;
+        const tpl = document.createElement('template');
+        tpl.innerHTML = buildMessageHtml(m, Date.now()).trim();
+        const node = tpl.content.firstElementChild;
+        if (node) {
+          messagesList.appendChild(node);
+          // Cap visible DOM nodes for zero-lag scrolling
+          while (messagesList.children.length > MAX_VISIBLE_MESSAGES) {
+            messagesList.removeChild(messagesList.firstElementChild);
+          }
+        }
+        if (forceScroll || nearBottom) {
+          messagesList.scrollTop = messagesList.scrollHeight;
+        }
+      }
+
+      // Fast O(1) in-place update for reactions, votes, or upload completion
+      function updateMessageNodeInPlace(msgId) {
+        const m = state.messages.find(item => item.id === msgId);
+        const existing = messagesList.querySelector(`[data-msg-id="${msgId}"]`);
+        if (!m || !existing) return;
+        const tpl = document.createElement('template');
+        tpl.innerHTML = buildMessageHtml(m, Date.now()).trim();
+        const fresh = tpl.content.firstElementChild;
+        if (fresh) {
+          fresh.classList.remove('msg-enter');
+          existing.replaceWith(fresh);
+        }
+      }
+
+      // Full render (used on room join, search, or clear)
+      function renderMessages(forceScroll) {
+        const nearBottom = (messagesList.scrollHeight - messagesList.scrollTop - messagesList.clientHeight) < 140;
+        const q = state.searchQuery;
+        const now = Date.now();
+        const filtered = state.messages.filter(m => {
+          if (m.expiresAt && m.expiresAt <= now) return false;
+          if (state.starredOnly && !m.starred) return false;
+          if (!q) return true;
+          if (m.type === 'system') return false;
+          const textMatch = m.text && m.text.toLowerCase().includes(q);
+          const pollMatch = m.poll && m.poll.question.toLowerCase().includes(q);
+          const fileMatch = m.files && m.files.some(f => f.name.toLowerCase().includes(q));
+          const senderMatch = m.sender && m.sender.toLowerCase().includes(q);
+          return textMatch || pollMatch || fileMatch || senderMatch;
+        }).slice(-MAX_VISIBLE_MESSAGES);
+
+        if (!filtered.length) {
+          messagesList.innerHTML = `
+            <div data-empty-state="1" class="h-full flex flex-col items-center justify-center text-center py-12 text-slate-500">
+              <p class="text-sm font-medium">${q ? 'No matching messages or files' : 'No messages yet'}</p>
+            </div>
+          `;
+          return;
+        }
+
+        messagesList.innerHTML = filtered.map(m => buildMessageHtml(m, now)).join('');
+        if (forceScroll || nearBottom) {
+          messagesList.scrollTop = messagesList.scrollHeight;
+        }
+      }
+
+      // Event Delegation for Replies, Votes, Reactions & Lightbox
+      messagesList.addEventListener('click', (e) => {
+        const deleteBtn = e.target.closest('[data-delete-msg]');
+        if (deleteBtn && state.isHost) {
+          const msgId = deleteBtn.getAttribute('data-delete-msg');
+          deleteMessageLocally(msgId);
+          sendControlEvent({ kind: 'delete_message', msgId });
+          showToast('Message deleted for everyone', 'info');
+          return;
+        }
+
+        const copyBtn = e.target.closest('[data-copy-msg]');
+        if (copyBtn) {
+          const msg = state.messages.find(m => m.id === copyBtn.getAttribute('data-copy-msg'));
+          if (msg && msg.text) copyTextToClipboard(msg.text, 'Copied message');
+          return;
+        }
+
+        const editBtn = e.target.closest('[data-edit-msg]');
+        if (editBtn) {
+          const msg = state.messages.find(m => m.id === editBtn.getAttribute('data-edit-msg'));
+          if (msg && msg.isSelf && msg.text) {
+            state.editingMsgId = msg.id;
+            state.replyTo = null;
+            replyBanner.classList.add('hidden');
+            editTargetText.textContent = msg.text;
+            editBanner.classList.remove('hidden');
+            messageInput.value = msg.text;
+            messageInput.style.height = 'auto';
+            messageInput.style.height = Math.min(messageInput.scrollHeight, 128) + 'px';
+            messageInput.focus();
+          }
+          return;
+        }
+
+        const starBtn = e.target.closest('[data-star-msg]');
+        if (starBtn) {
+          const msgId = starBtn.getAttribute('data-star-msg');
+          const msg = state.messages.find(m => m.id === msgId);
+          if (msg) {
+            msg.starred = !msg.starred;
+            scheduleSaveRoomMessages();
+            if (state.starredOnly) renderMessages(false);
+            else updateMessageNodeInPlace(msgId);
+          }
+          return;
+        }
+
+        const pinBtn = e.target.closest('[data-pin-msg]');
+        if (pinBtn) {
+          const msgId = pinBtn.getAttribute('data-pin-msg');
+          state.pinnedMsgId = state.pinnedMsgId === msgId ? null : msgId;
+          updatePinnedBanner();
+          sendControlEvent({ kind: 'pin_message', msgId: state.pinnedMsgId });
+          updateMessageNodeInPlace(msgId);
+          showToast(state.pinnedMsgId ? 'Message pinned' : 'Message unpinned', 'info');
+          return;
+        }
+
+        const burnViewOnce = (msgId) => {
+          const existingTimer = state.viewOnceTimers.get(msgId);
+          if (existingTimer) {
+            clearInterval(existingTimer);
+            state.viewOnceTimers.delete(msgId);
+          }
+          const msg = state.messages.find(m => m.id === msgId);
+          if (msg && msg.viewOnce) {
+            msg.viewOnceState = 'burned';
+            msg.text = '';
+            msg.files = [];
+            scheduleSaveRoomMessages();
+            updateMessageNodeInPlace(msgId);
+          }
+        };
+
+        const revealBtn = e.target.closest('[data-reveal-once]');
+        if (revealBtn) {
+          const msgId = revealBtn.getAttribute('data-reveal-once');
+          const msg = state.messages.find(m => m.id === msgId);
+          if (msg && msg.viewOnce && msg.viewOnceState === 'locked') {
+            msg.viewOnceState = 'opened';
+            msg.viewOnceBurnAt = Date.now() + 5000;
+            updateMessageNodeInPlace(msgId);
+            const prevTimer = state.viewOnceTimers.get(msgId);
+            if (prevTimer) clearInterval(prevTimer);
+            const intervalId = setInterval(() => {
+              const remMs = (msg.viewOnceBurnAt || 0) - Date.now();
+              if (remMs <= 0 || !state.roomCode) {
+                burnViewOnce(msgId);
+                return;
+              }
+              const cdEl = messagesList.querySelector(`[data-vo-countdown="${msgId}"]`);
+              if (cdEl) cdEl.textContent = String(Math.max(1, Math.ceil(remMs / 1000)));
+            }, 250);
+            state.viewOnceTimers.set(msgId, intervalId);
+          }
+          return;
+        }
+
+        const burnBtn = e.target.closest('[data-burn-once]');
+        if (burnBtn) {
+          burnViewOnce(burnBtn.getAttribute('data-burn-once'));
+          return;
+        }
+
+        const replyBtn = e.target.closest('[data-reply-msg]');
+        if (replyBtn) {
+          const msgId = replyBtn.getAttribute('data-reply-msg');
+          const msg = state.messages.find(m => m.id === msgId);
+          if (msg) {
+            const snippet = msg.text || (msg.poll ? msg.poll.question : '') || (msg.files && msg.files[0] ? msg.files[0].name : 'Attachment');
+            state.replyTo = { id: msg.id, sender: msg.sender, text: snippet };
+            replyTargetSender.textContent = msg.sender;
+            replyTargetText.textContent = snippet;
+            replyBanner.classList.remove('hidden');
+            messageInput.focus();
+          }
+          return;
+        }
+
+        const voteBtn = e.target.closest('[data-vote-msg]');
+        if (voteBtn) {
+          const msgId = voteBtn.getAttribute('data-vote-msg');
+          const optionIdx = Number(voteBtn.getAttribute('data-vote-opt'));
+          if (applyVote(msgId, optionIdx, state.clientId)) {
+            scheduleSaveRoomMessages();
+            broadcastLocalEvent({ type: 'vote', msgId, optionIdx, voterId: state.clientId });
+            publishCloudVote(msgId, optionIdx);
+            updateMessageNodeInPlace(msgId);
+          }
+          return;
+        }
+
+        const reactBtn = e.target.closest('[data-react-msg]');
+        if (reactBtn) {
+          const msgId = reactBtn.getAttribute('data-react-msg');
+          const em = reactBtn.getAttribute('data-react-emoji');
+          const msg = state.messages.find(m => m.id === msgId);
+          if (msg) {
+            msg.reactions = msg.reactions || {};
+            msg.reactions[em] = (msg.reactions[em] || 0) + 1;
+            scheduleSaveRoomMessages();
+            broadcastLocalEvent({ type: 'reaction', msgId, reactions: msg.reactions });
+            publishCloudReaction(msgId, msg.reactions);
+            updateMessageNodeInPlace(msgId);
+          }
+          return;
+        }
+
+        const imgEl = e.target.closest('[data-lightbox-src]');
+        if (imgEl) {
+          const src = imgEl.getAttribute('data-lightbox-src');
+          const name = imgEl.getAttribute('data-lightbox-name');
+          lightboxImg.src = src;
+          lightboxTitle.textContent = name;
+          lightboxDownload.href = src;
+          lightboxDownload.setAttribute('download', name);
+          lightboxModal.classList.remove('hidden');
+          refreshIcons();
+        }
+      });
+
+      lightboxClose.addEventListener('click', () => lightboxModal.classList.add('hidden'));
+      lightboxModal.addEventListener('click', (e) => {
+        if (e.target === lightboxModal) lightboxModal.classList.add('hidden');
+      });
+
+      // Register PWA Service Worker
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('./sw.js').catch(() => {});
+        });
+      }
+
+      // Init
+      refreshIcons();
+      pinInputs[0].focus();
+    })();
+  </script>
+</body>
+</html>
